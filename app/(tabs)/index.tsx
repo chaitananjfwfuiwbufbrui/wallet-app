@@ -2,19 +2,23 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Play } from 'lucide-react-native';
+import { Play, Plus } from 'lucide-react-native';
 import { SubjectCard } from '../../components/SubjectCard';
 import { SearchBar } from '../../components/SearchBar';
 import { ProgressSummary } from '../../components/ProgressSummary';
+import { CreateSubjectModal } from '../../components/CreateSubjectModal';
 import { useAppContext } from '../../contexts/AppContext';
 import { mockSubjects } from '../../data/mockData';
+import { Subject } from '../../types';
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [subjects, setSubjects] = useState<Subject[]>(mockSubjects);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const { userProgress, setCurrentSubject, lastViewedTopic } = useAppContext();
   const router = useRouter();
 
-  const filteredSubjects = mockSubjects.filter(subject =>
+  const filteredSubjects = subjects.filter(subject =>
     subject.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -27,6 +31,24 @@ export default function HomePage() {
     if (lastViewedTopic) {
       router.push(`/topic/${lastViewedTopic}`);
     }
+  };
+
+  const handleCreateSubject = (newSubjectData: { name: string; topics: string[]; icon: string; color: string }) => {
+    const newSubject: Subject = {
+      id: Date.now().toString(),
+      name: newSubjectData.name,
+      icon: newSubjectData.icon,
+      progress: 0,
+      lastAccessed: 'Just created',
+      totalLessons: Math.ceil(newSubjectData.topics.length / 3), // Group topics into lessons
+      completedLessons: 0,
+      color: newSubjectData.color
+    };
+    
+    setSubjects(prev => [...prev, newSubject]);
+    setShowCreateModal(false);
+    // Optionally navigate to the new subject
+    // router.push(`/subject/${newSubject.id}`);
   };
 
   return (
@@ -66,6 +88,19 @@ export default function HomePage() {
           ))}
         </View>
       </ScrollView>
+      
+      <TouchableOpacity 
+        style={styles.fab} 
+        onPress={() => setShowCreateModal(true)}
+      >
+        <Plus size={24} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      <CreateSubjectModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreateSubject={handleCreateSubject}
+      />
     </SafeAreaView>
   );
 }
@@ -74,6 +109,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F3F4F6',
+    position: 'relative',
   },
   scrollView: {
     flex: 1,
@@ -123,5 +159,21 @@ const styles = StyleSheet.create({
   sectionCount: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });
