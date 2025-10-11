@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, BookOpen, Play, Image as ImageIcon, Bookmark } from 'lucide-react-native';
+import { ArrowLeft, BookOpen, Play, Zap, Bookmark } from 'lucide-react-native';
 import { mockTopics } from '../../data/mockData';
 
 export default function TopicPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'text' | 'video' | 'comic'>('text');
+  const [activeTab, setActiveTab] = useState<'text' | 'video' | 'practice'>('text');
   const [isBookmarked, setIsBookmarked] = useState(false);
 
   const topic = mockTopics.find(t => t.id === id);
@@ -17,7 +17,11 @@ export default function TopicPage() {
     router.push(`/quiz/${id}`);
   };
 
-  const handleActivityPress = () => {
+  const handleSarcasticQuestionsPress = () => {
+    router.push(`/sarcastic/${id}`);
+  };
+
+  const handlePracticeActivityPress = () => {
     router.push(`/activity/${id}`);
   };
 
@@ -70,12 +74,12 @@ export default function TopicPage() {
         </TouchableOpacity>
         
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'comic' && styles.activeTab]}
-          onPress={() => setActiveTab('comic')}
+          style={[styles.tab, activeTab === 'practice' && styles.activeTab]}
+          onPress={() => setActiveTab('practice')}
         >
-          <ImageIcon size={16} color={activeTab === 'comic' ? '#FFFFFF' : '#6B7280'} />
-          <Text style={[styles.tabText, activeTab === 'comic' && styles.activeTabText]}>
-            Comic
+          <Zap size={16} color={activeTab === 'practice' ? '#FFFFFF' : '#6B7280'} />
+          <Text style={[styles.tabText, activeTab === 'practice' && styles.activeTabText]}>
+            Practice
           </Text>
         </TouchableOpacity>
       </View>
@@ -101,32 +105,29 @@ export default function TopicPage() {
           </View>
         )}
 
-        {activeTab === 'comic' && (
-          <View style={styles.comicContent}>
-            {topic.content.comicPanels?.map((panel, index) => (
-              <View key={panel.id} style={styles.comicPanel}>
-                <View style={styles.panelImagePlaceholder}>
-                  <Text style={styles.panelNumber}>Panel {index + 1}</Text>
-                  <ImageIcon size={32} color="#6B7280" />
-                </View>
-                <Text style={styles.panelCaption}>{panel.caption}</Text>
-                {panel.dialogue && (
-                  <View style={styles.speechBubble}>
-                    <Text style={styles.dialogue}>"{panel.dialogue}"</Text>
-                  </View>
-                )}
-              </View>
-            ))}
+        {activeTab === 'practice' && (
+          <View style={styles.practiceContent}>
+            <View style={styles.practiceCard}>
+              <Zap size={32} color="#10B981" />
+              <Text style={styles.practiceTitle}>Interactive Practice</Text>
+              <Text style={styles.practiceDescription}>
+                Apply what you've learned with hands-on coding exercises and interactive problems.
+                Practice makes perfect!
+              </Text>
+              <TouchableOpacity style={styles.startPracticeButton} onPress={handlePracticeActivityPress}>
+                <Text style={styles.startPracticeText}>Start Practice</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.quizButton} onPress={handleQuizPress}>
-            <Text style={styles.buttonText}>Take Sarcastic Quiz</Text>
+            <Text style={styles.buttonText}>Take Quiz</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.activityButton} onPress={handleActivityPress}>
-            <Text style={styles.buttonText}>Practice Activity</Text>
+          <TouchableOpacity style={styles.sarcasticButton} onPress={handleSarcasticQuestionsPress}>
+            <Text style={styles.buttonText}>Sarcastic Questions</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -244,52 +245,45 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: '#374151',
   },
-  comicContent: {
-    gap: 20,
+  practiceContent: {
     marginBottom: 20,
   },
-  comicPanel: {
+  practiceCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 20,
+    padding: 32,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
   },
-  panelImagePlaceholder: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    padding: 40,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  panelNumber: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  panelCaption: {
-    fontSize: 16,
+  practiceTitle: {
+    fontSize: 20,
     fontWeight: '600',
     color: '#1F2937',
+    marginTop: 16,
     marginBottom: 12,
     textAlign: 'center',
   },
-  speechBubble: {
-    backgroundColor: '#EEF2FF',
-    borderRadius: 12,
-    padding: 12,
-    alignSelf: 'center',
-    maxWidth: '80%',
-  },
-  dialogue: {
-    fontSize: 14,
-    color: '#3B82F6',
-    fontStyle: 'italic',
+  practiceDescription: {
+    fontSize: 16,
+    color: '#6B7280',
     textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  startPracticeButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  startPracticeText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   actionButtons: {
     gap: 12,
@@ -301,8 +295,8 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
   },
-  activityButton: {
-    backgroundColor: '#10B981',
+  sarcasticButton: {
+    backgroundColor: '#F59E0B',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',

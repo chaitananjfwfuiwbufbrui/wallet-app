@@ -35,6 +35,8 @@ export default function RootLayout() {
         <Stack.Screen name="lesson/[id]" />
         <Stack.Screen name="topic/[id]" />
         <Stack.Screen name="quiz/[id]" />
+        <Stack.Screen name="sarcastic/[id]" />
+        <Stack.Screen name="flashcards/[id]" />
         <Stack.Screen name="activity/[id]" />
         <Stack.Screen name="+not-found" />
       </Stack>
