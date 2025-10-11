@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, RotateCcw, CheckCircle, Clock } from 'lucide-react-native';
 import { useAppContext } from '../../contexts/AppContext';
-import { mockRecallItems } from '../../data/mockData';
 
 export default function FlashcardsPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
