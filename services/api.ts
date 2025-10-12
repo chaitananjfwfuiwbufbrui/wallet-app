@@ -1,5 +1,78 @@
 const API_BASE_URL = 'http://localhost:8000';
 
+// Fallback mock data when API is unavailable
+const MOCK_SUBJECTS = [
+  {
+    id: 'mock-1',
+    title: 'Mathematics',
+    description: 'Learn fundamental mathematical concepts',
+    image_url: null
+  },
+  {
+    id: 'mock-2', 
+    title: 'Programming',
+    description: 'Master programming fundamentals',
+    image_url: null
+  },
+  {
+    id: 'mock-3',
+    title: 'Science',
+    description: 'Explore scientific principles',
+    image_url: null
+  }
+];
+
+const MOCK_LESSONS = [
+  {
+    id: 'mock-lesson-1',
+    title: 'Introduction to the Subject',
+    description: 'Get started with the basics',
+    order: 0,
+    subject_id: ''
+  },
+  {
+    id: 'mock-lesson-2',
+    title: 'Intermediate Concepts',
+    description: 'Build on your foundation',
+    order: 1,
+    subject_id: ''
+  }
+];
+
+const MOCK_TOPICS = [
+  {
+    id: 'mock-topic-1',
+    title: 'Getting Started',
+    description: 'Your first steps in learning',
+    lesson_id: ''
+  },
+  {
+    id: 'mock-topic-2',
+    title: 'Core Concepts',
+    description: 'Understanding the fundamentals',
+    lesson_id: ''
+  }
+];
+
+const MOCK_CONTENT = [
+  {
+    id: 'mock-content-1',
+    content_type: 'in-depth',
+    data: JSON.stringify({
+      topic: 'Sample Topic',
+      content: {
+        introduction: 'This is a sample topic to demonstrate the app functionality when the API server is not available.',
+        core_principles: 'The core principles involve understanding the basic concepts and applying them effectively.',
+        applications: 'This knowledge can be applied in various real-world scenarios.',
+        limitations: 'Every approach has its limitations that should be considered.',
+        future_scope: 'There are many opportunities for future development and improvement.'
+      }
+    }),
+    youtube_links: null,
+    topic_id: ''
+  }
+];
+
 export interface ApiSubject {
   id: string;
   title: string;
@@ -59,23 +132,39 @@ class ApiService {
 
       return await response.json();
     } catch (error) {
-      console.error(`API Error for ${url}:`, error);
-      throw error;
+      console.warn(`API Error for ${endpoint}:`, error);
+      console.warn('Using fallback mock data');
+      return null; // Return null to indicate API failure
     }
   }
 
   async getSubjects(): Promise<ApiSubject[]> {
-    return this.fetchWithErrorHandling<ApiSubject[]>('/subjects/');
+    const result = await this.fetchWithErrorHandling('/subjects/');
+    return result || MOCK_SUBJECTS;
   }
 
   async getLessons(subjectId: string): Promise<ApiLesson[]> {
-    return this.fetchWithErrorHandling<ApiLesson[]>(`/lessons/subject/${subjectId}`);
+    const result = await this.fetchWithErrorHandling(`/lessons/subject/${subjectId}`);
+    if (result) return result;
+    
+    // Return mock lessons with the correct subject_id
+    return MOCK_LESSONS.map(lesson => ({
+      ...lesson,
+      subject_id: subjectId
+    }));
   }
 
   async getTopics(lessonId: string): Promise<ApiTopic[]> {
     // Remove hyphens from lesson ID for API call
     const cleanLessonId = lessonId.replace(/-/g, '');
-    return this.fetchWithErrorHandling<ApiTopic[]>(`/topics/lesson/${cleanLessonId}`);
+    const result = await this.fetchWithErrorHandling(`/topics/lesson/${cleanLessonId}`);
+    if (result) return result;
+    
+    // Return mock topics with the correct lesson_id
+    return MOCK_TOPICS.map(topic => ({
+      ...topic,
+      lesson_id: lessonId
+    }));
   }
 
   async getTopicContent(topicId: string, regen: boolean = false): Promise<ApiContent[]> {
@@ -100,7 +189,14 @@ class ApiService {
           future_scope: ''
         }
       };
-    }
+    const result = await this.fetchWithErrorHandling(`/content/topic/${topicId}?regen=false`);
+    if (result) return result;
+    
+    // Return mock content with the correct topic_id
+    return MOCK_CONTENT.map(content => ({
+      ...content,
+      topic_id: topicId
+    }));
   }
 }
 
