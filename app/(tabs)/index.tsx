@@ -3,23 +3,23 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Play, Plus } from 'lucide-react-native';
-import { SubjectCard } from '../../components/SubjectCard';
+import { ApiSubjectCard } from '../../components/ApiSubjectCard';
 import { SearchBar } from '../../components/SearchBar';
 import { ProgressSummary } from '../../components/ProgressSummary';
 import { CreateSubjectModal } from '../../components/CreateSubjectModal';
 import { useAppContext } from '../../contexts/AppContext';
-import { mockSubjects } from '../../data/mockData';
-import { Subject } from '../../types';
+import { useSubjects } from '../../hooks/useApi';
+import { ApiSubject } from '../../services/api';
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [subjects, setSubjects] = useState<Subject[]>(mockSubjects);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const { userProgress, setCurrentSubject, lastViewedTopic } = useAppContext();
+  const { subjects, loading, error } = useSubjects();
   const router = useRouter();
 
   const filteredSubjects = subjects.filter(subject =>
-    subject.name.toLowerCase().includes(searchQuery.toLowerCase())
+    subject.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleSubjectPress = (subjectId: string) => {
@@ -34,22 +34,30 @@ export default function HomePage() {
   };
 
   const handleCreateSubject = (newSubjectData: { name: string; topics: string[]; icon: string; color: string }) => {
-    const newSubject: Subject = {
-      id: Date.now().toString(),
-      name: newSubjectData.name,
-      icon: newSubjectData.icon,
-      progress: 0,
-      lastAccessed: 'Just created',
-      totalLessons: Math.ceil(newSubjectData.topics.length / 3), // Group topics into lessons
-      completedLessons: 0,
-      color: newSubjectData.color
-    };
-    
-    setSubjects(prev => [...prev, newSubject]);
+    // TODO: Implement API call to create new subject
+    console.log('Create subject:', newSubjectData);
     setShowCreateModal(false);
-    // Optionally navigate to the new subject
-    // router.push(`/subject/${newSubject.id}`);
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading subjects...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -80,7 +88,7 @@ export default function HomePage() {
           </View>
 
           {filteredSubjects.map((subject) => (
-            <SubjectCard
+            <ApiSubjectCard
               key={subject.id}
               subject={subject}
               onPress={() => handleSubjectPress(subject.id)}
@@ -175,5 +183,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#EF4444',
+    textAlign: 'center',
   },
 });
