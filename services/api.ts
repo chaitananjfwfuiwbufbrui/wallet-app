@@ -189,6 +189,7 @@ class ApiService {
           future_scope: ''
         }
       };
+    }
     const result = await this.fetchWithErrorHandling(`/content/topic/${topicId}?regen=false`);
     if (result) return result;
     
