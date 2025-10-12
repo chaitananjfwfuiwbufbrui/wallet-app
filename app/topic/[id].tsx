@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, BookOpen, Play, Zap, Bookmark } from 'lucide-react-native';
-import { mockTopics } from '../../data/mockData';
+import { useTopicContent } from '../../hooks/useApi';
+import { apiService } from '../../services/api';
 
 export default function TopicPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -11,7 +12,10 @@ export default function TopicPage() {
   const [activeTab, setActiveTab] = useState<'text' | 'video' | 'practice'>('text');
   const [isBookmarked, setIsBookmarked] = useState(false);
 
-  const topic = mockTopics.find(t => t.id === id);
+  const { content, loading, error } = useTopicContent(id || null);
+  
+  // Parse the content data
+  const parsedContent = content.length > 0 ? apiService.parseContentData(content[0].data) : null;
 
   const handleQuizPress = () => {
     router.push(`/quiz/${id}`);
@@ -25,10 +29,30 @@ export default function TopicPage() {
     router.push(`/activity/${id}`);
   };
 
-  if (!topic) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text>Topic not found</Text>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading content...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!parsedContent) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text>Content not found</Text>
       </SafeAreaView>
     );
   }
@@ -39,7 +63,7 @@ export default function TopicPage() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft size={24} color="#1F2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{topic.title}</Text>
+        <Text style={styles.headerTitle}>{parsedContent.topic}</Text>
         <TouchableOpacity 
           style={styles.bookmarkButton} 
           onPress={() => setIsBookmarked(!isBookmarked)}
@@ -87,7 +111,17 @@ export default function TopicPage() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {activeTab === 'text' && (
           <View style={styles.textContent}>
-            <Text style={styles.markdown}>{topic.content.text}</Text>
+            <Text style={styles.sectionTitle}>Introduction</Text>
+            <Text style={styles.markdown}>{parsedContent.content.introduction}</Text>
+            
+            <Text style={styles.sectionTitle}>Core Principles</Text>
+            <Text style={styles.markdown}>{parsedContent.content.core_principles}</Text>
+            
+            <Text style={styles.sectionTitle}>Applications</Text>
+            <Text style={styles.markdown}>{parsedContent.content.applications}</Text>
+            
+            <Text style={styles.sectionTitle}>Implementation Details</Text>
+            <Text style={styles.markdown}>{parsedContent.content.implementation_details}</Text>
           </View>
         )}
 
@@ -95,12 +129,12 @@ export default function TopicPage() {
           <View style={styles.videoContent}>
             <View style={styles.videoPlaceholder}>
               <Play size={48} color="#FFFFFF" />
-              <Text style={styles.videoTitle}>Vector Operations Explained</Text>
+              <Text style={styles.videoTitle}>{parsedContent.topic} Explained</Text>
               <Text style={styles.videoDuration}>12:34</Text>
             </View>
             <Text style={styles.videoDescription}>
-              Watch this comprehensive video explanation of vector operations, including practical 
-              examples and visual demonstrations of addition, scalar multiplication, and dot products.
+              Watch this comprehensive video explanation of {parsedContent.topic.toLowerCase()}, 
+              including practical examples and visual demonstrations.
             </Text>
           </View>
         )}
@@ -210,6 +244,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: '#374151',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 20,
+    marginBottom: 12,
   },
   videoContent: {
     backgroundColor: '#FFFFFF',
@@ -305,5 +347,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#EF4444',
+    textAlign: 'center',
   },
 });

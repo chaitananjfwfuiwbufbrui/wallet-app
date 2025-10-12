@@ -3,16 +3,20 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Play } from 'lucide-react-native';
-import { TopicCard } from '../../components/TopicCard';
-import { mockLessons, mockTopics, mockSubjects } from '../../data/mockData';
+import { ApiTopicCard } from '../../components/ApiTopicCard';
+import { useSubjects, useLessons, useTopics } from '../../hooks/useApi';
 
 export default function LessonPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  const lesson = mockLessons.find(l => l.id === id);
-  const subject = lesson ? mockSubjects.find(s => s.id === lesson.subjectId) : null;
-  const topics = mockTopics.filter(t => t.lessonId === id);
+  const { subjects } = useSubjects();
+  const { lessons } = useLessons(null); // We'll need to get all lessons to find the current one
+  const { topics, loading, error } = useTopics(id || null);
+  
+  // Find the lesson and subject
+  const lesson = lessons.find(l => l.id === id);
+  const subject = lesson ? subjects.find(s => s.id === lesson.subject_id) : null;
 
   const handleTopicPress = (topicId: string) => {
     router.push(`/topic/${topicId}`);
@@ -23,6 +27,26 @@ export default function LessonPage() {
       router.push(`/topic/${topics[0].id}`);
     }
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading topics...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!lesson || !subject) {
     return (
@@ -41,7 +65,7 @@ export default function LessonPage() {
         <View style={styles.breadcrumbs}>
           <Text style={styles.breadcrumbText}>Home</Text>
           <Text style={styles.breadcrumbSeparator}> > </Text>
-          <Text style={styles.breadcrumbText}>{subject.name}</Text>
+          <Text style={styles.breadcrumbText}>{subject.title}</Text>
           <Text style={styles.breadcrumbSeparator}> > </Text>
           <Text style={styles.breadcrumbCurrent}>{lesson.title}</Text>
         </View>
@@ -53,11 +77,11 @@ export default function LessonPage() {
           <Text style={styles.lessonDescription}>{lesson.description}</Text>
           
           <View style={styles.lessonMeta}>
-            <Text style={styles.metaText}>{lesson.topics} Topics</Text>
+            <Text style={styles.metaText}>{topics.length} Topics</Text>
             <Text style={styles.metaSeparator}>•</Text>
-            <Text style={styles.metaText}>{lesson.estimatedTime}</Text>
+            <Text style={styles.metaText}>2-3h</Text>
             <Text style={styles.metaSeparator}>•</Text>
-            <Text style={styles.metaText}>{lesson.difficulty}</Text>
+            <Text style={styles.metaText}>Beginner</Text>
           </View>
 
           <TouchableOpacity style={styles.startButton} onPress={handleStartFromBeginning}>
@@ -69,7 +93,7 @@ export default function LessonPage() {
         <View style={styles.topicsSection}>
           <Text style={styles.sectionTitle}>Topics</Text>
           {topics.map((topic) => (
-            <TopicCard
+            <ApiTopicCard
               key={topic.id}
               topic={topic}
               onPress={() => handleTopicPress(topic.id)}
@@ -177,5 +201,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1F2937',
     marginBottom: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#EF4444',
+    textAlign: 'center',
   },
 });

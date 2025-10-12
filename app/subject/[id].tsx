@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Filter } from 'lucide-react-native';
-import { LessonCard } from '../../components/LessonCard';
+import { ApiLessonCard } from '../../components/ApiLessonCard';
 import { useAppContext } from '../../contexts/AppContext';
-import { mockSubjects, mockLessons } from '../../data/mockData';
+import { useSubjects, useLessons } from '../../hooks/useApi';
 
 export default function SubjectPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -13,12 +13,15 @@ export default function SubjectPage() {
   const router = useRouter();
   const [filter, setFilter] = useState<'all' | 'completed' | 'new'>('all');
 
-  const subject = mockSubjects.find(s => s.id === id);
-  const lessons = mockLessons.filter(l => l.subjectId === id);
+  const { subjects } = useSubjects();
+  const { lessons, loading, error } = useLessons(id || null);
+  
+  const subject = subjects.find(s => s.id === id);
 
   const filteredLessons = lessons.filter(lesson => {
-    if (filter === 'completed') return lesson.completion === 100;
-    if (filter === 'new') return lesson.completion === 0;
+    // For now, all lessons are considered "new" since we don't have completion data
+    if (filter === 'completed') return false;
+    if (filter === 'new') return true;
     return true;
   });
 
@@ -26,6 +29,26 @@ export default function SubjectPage() {
     setCurrentLesson(lessonId);
     router.push(`/lesson/${lessonId}`);
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading lessons...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!subject) {
     return (
@@ -44,7 +67,7 @@ export default function SubjectPage() {
         <View style={styles.breadcrumbs}>
           <Text style={styles.breadcrumbText}>Home</Text>
           <Text style={styles.breadcrumbSeparator}> > </Text>
-          <Text style={styles.breadcrumbCurrent}>{subject.name}</Text>
+          <Text style={styles.breadcrumbCurrent}>{subject.title}</Text>
         </View>
         <TouchableOpacity style={styles.filterButton}>
           <Filter size={20} color="#6B7280" />
@@ -53,10 +76,10 @@ export default function SubjectPage() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.subjectInfo}>
-          <Text style={styles.subjectIcon}>{subject.icon}</Text>
-          <Text style={styles.subjectTitle}>{subject.name}</Text>
+          <Text style={styles.subjectIcon}>📚</Text>
+          <Text style={styles.subjectTitle}>{subject.title}</Text>
           <Text style={styles.subjectProgress}>
-            {subject.completedLessons} of {subject.totalLessons} lessons completed
+            0 of {lessons.length} lessons completed
           </Text>
         </View>
 
@@ -82,7 +105,7 @@ export default function SubjectPage() {
 
         <View style={styles.lessonsContainer}>
           {filteredLessons.map((lesson) => (
-            <LessonCard
+            <ApiLessonCard
               key={lesson.id}
               lesson={lesson}
               onPress={() => handleLessonPress(lesson.id)}
@@ -178,5 +201,25 @@ const styles = StyleSheet.create({
   },
   lessonsContainer: {
     paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#EF4444',
+    textAlign: 'center',
   },
 });
