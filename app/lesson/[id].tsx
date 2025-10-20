@@ -4,19 +4,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Play } from 'lucide-react-native';
 import { ApiTopicCard } from '../../components/ApiTopicCard';
-import { useSubjects, useLessons, useTopics } from '../../hooks/useApi';
+import { useSubjects, useLesson, useTopics } from '../../hooks/useApi';
 
 export default function LessonPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
   const { subjects } = useSubjects();
-  const { lessons } = useLessons(null); // We'll need to get all lessons to find the current one
-  const { topics, loading, error } = useTopics(id || null);
-  
-  // Find the lesson and subject
-  const lesson = lessons.find(l => l.id === id);
+  const { lesson, loading: lessonLoading } = useLesson(id || null);
+  const { topics, loading: topicsLoading, error } = useTopics(id || null);
+
   const subject = lesson ? subjects.find(s => s.id === lesson.subject_id) : null;
+  const loading = lessonLoading || topicsLoading;
 
   const handleTopicPress = (topicId: string) => {
     router.push(`/topic/${topicId}`);

@@ -187,6 +187,19 @@ class ApiService {
     }));
   }
 
+  async getLesson(lessonId: string): Promise<ApiLesson | null> {
+    const result = await this.fetchWithErrorHandling<ApiLesson>(`/lessons/${lessonId}`);
+    if (result) return result;
+
+    return {
+      id: lessonId,
+      title: 'Sample Lesson',
+      description: 'This is a sample lesson',
+      order: 0,
+      subject_id: ''
+    };
+  }
+
   async getTopics(lessonId: string): Promise<ApiTopic[]> {
     const result = await this.fetchWithErrorHandling<ApiTopic[]>(`/topics/lesson/${lessonId}`);
     if (result) return result;
