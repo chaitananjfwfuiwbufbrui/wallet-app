@@ -118,7 +118,7 @@ export interface ParsedContent {
 }
 
 class ApiService {
-  private async fetchWithErrorHandling<T>(url: string): Promise<T> {
+  private async fetchWithErrorHandling<T>(url: string): Promise<T | null> {
     try {
       const response = await fetch(`${API_BASE_URL}${url}`, {
         headers: {
@@ -132,9 +132,9 @@ class ApiService {
 
       return await response.json();
     } catch (error) {
-      console.warn(`API Error for ${endpoint}:`, error);
+      console.warn(`API Error for ${url}:`, error);
       console.warn('Using fallback mock data');
-      return null; // Return null to indicate API failure
+      return null;
     }
   }
 
@@ -168,7 +168,13 @@ class ApiService {
   }
 
   async getTopicContent(topicId: string, regen: boolean = false): Promise<ApiContent[]> {
-    return this.fetchWithErrorHandling<ApiContent[]>(`/content/topic/${topicId}?regen=${regen}`);
+    const result = await this.fetchWithErrorHandling<ApiContent[]>(`/content/topic/${topicId}?regen=${regen}`);
+    if (result) return result;
+
+    return MOCK_CONTENT.map(content => ({
+      ...content,
+      topic_id: topicId
+    }));
   }
 
   parseContentData(contentData: string): ParsedContent {
@@ -190,14 +196,6 @@ class ApiService {
         }
       };
     }
-    const result = await this.fetchWithErrorHandling(`/content/topic/${topicId}?regen=false`);
-    if (result) return result;
-    
-    // Return mock content with the correct topic_id
-    return MOCK_CONTENT.map(content => ({
-      ...content,
-      topic_id: topicId
-    }));
   }
 }
 
