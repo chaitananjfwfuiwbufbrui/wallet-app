@@ -188,8 +188,7 @@ class ApiService {
   }
 
   async getTopics(lessonId: string): Promise<ApiTopic[]> {
-    const cleanLessonId = lessonId.replace(/-/g, '');
-    const result = await this.fetchWithErrorHandling<ApiTopic[]>(`/topics/lesson/${cleanLessonId}`);
+    const result = await this.fetchWithErrorHandling<ApiTopic[]>(`/topics/lesson/${lessonId}`);
     if (result) return result;
 
     return MOCK_TOPICS.map(topic => ({
