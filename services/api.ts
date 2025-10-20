@@ -117,6 +117,25 @@ export interface ParsedContent {
   };
 }
 
+export interface CourseLesson {
+  lesson_title: string;
+  brief_description: string;
+  learning_goals: string[];
+  difficulty_level: string;
+}
+
+export interface CourseCurriculum {
+  course_title: string;
+  learning_objectives: string[];
+  lessons: CourseLesson[];
+}
+
+export interface CourseGenerationResponse {
+  template_id: string;
+  curriculum: CourseCurriculum;
+  message: string;
+}
+
 class ApiService {
   private async fetchWithErrorHandling<T>(url: string): Promise<T | null> {
     try {
@@ -139,15 +158,29 @@ class ApiService {
   }
 
   async getSubjects(): Promise<ApiSubject[]> {
-    const result = await this.fetchWithErrorHandling('/subjects/');
-    return result || MOCK_SUBJECTS;
+    try {
+      const response = await fetch(`${API_BASE_URL}/subjects/`, {
+        headers: {
+          'accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.warn('API Error for /subjects/:', error);
+      return [];
+    }
   }
 
   async getLessons(subjectId: string): Promise<ApiLesson[]> {
-    const result = await this.fetchWithErrorHandling(`/lessons/subject/${subjectId}`);
+    const result = await this.fetchWithErrorHandling<ApiLesson[]>(`/lessons/subject/${subjectId}`);
     if (result) return result;
-    
-    // Return mock lessons with the correct subject_id
+
     return MOCK_LESSONS.map(lesson => ({
       ...lesson,
       subject_id: subjectId
@@ -155,12 +188,10 @@ class ApiService {
   }
 
   async getTopics(lessonId: string): Promise<ApiTopic[]> {
-    // Remove hyphens from lesson ID for API call
     const cleanLessonId = lessonId.replace(/-/g, '');
-    const result = await this.fetchWithErrorHandling(`/topics/lesson/${cleanLessonId}`);
+    const result = await this.fetchWithErrorHandling<ApiTopic[]>(`/topics/lesson/${cleanLessonId}`);
     if (result) return result;
-    
-    // Return mock topics with the correct lesson_id
+
     return MOCK_TOPICS.map(topic => ({
       ...topic,
       lesson_id: lessonId
@@ -196,6 +227,43 @@ class ApiService {
         }
       };
     }
+  }
+
+  async generateCourse(topic: string, userId: string): Promise<CourseGenerationResponse> {
+    const response = await fetch(`${API_BASE_URL}/courses/generate`, {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        topic,
+        user_id: userId,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  }
+
+  async approveCourseTemplate(templateId: string, userId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/courses/templates/${templateId}/approve?user_id=${userId}`, {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  }
+
+  async regenerateCourse(topic: string, userId: string): Promise<CourseGenerationResponse> {
+    return this.generateCourse(topic, userId);
   }
 }
 

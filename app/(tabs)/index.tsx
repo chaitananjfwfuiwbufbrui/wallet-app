@@ -33,10 +33,9 @@ export default function HomePage() {
     }
   };
 
-  const handleCreateSubject = (newSubjectData: { name: string; topics: string[]; icon: string; color: string }) => {
-    // TODO: Implement API call to create new subject
-    console.log('Create subject:', newSubjectData);
+  const handleCreateSubject = () => {
     setShowCreateModal(false);
+    window.location.reload();
   };
 
   if (loading) {
@@ -87,13 +86,22 @@ export default function HomePage() {
             <Text style={styles.sectionCount}>{filteredSubjects.length} subjects</Text>
           </View>
 
-          {filteredSubjects.map((subject) => (
-            <ApiSubjectCard
-              key={subject.id}
-              subject={subject}
-              onPress={() => handleSubjectPress(subject.id)}
-            />
-          ))}
+          {filteredSubjects.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateTitle}>No subjects yet</Text>
+              <Text style={styles.emptyStateText}>
+                Create your first subject to start learning
+              </Text>
+            </View>
+          ) : (
+            filteredSubjects.map((subject) => (
+              <ApiSubjectCard
+                key={subject.id}
+                subject={subject}
+                onPress={() => handleSubjectPress(subject.id)}
+              />
+            ))
+          )}
         </View>
       </ScrollView>
       
@@ -202,6 +210,24 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: '#EF4444',
+    textAlign: 'center',
+  },
+  emptyState: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 40,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#6B7280',
     textAlign: 'center',
   },
 });
