@@ -31,7 +31,7 @@ export default function LessonPage() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading topics...</Text>
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
@@ -47,14 +47,6 @@ export default function LessonPage() {
     );
   }
 
-  if (!lesson || !subject) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Text>Lesson not found</Text>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -64,16 +56,20 @@ export default function LessonPage() {
         <View style={styles.breadcrumbs}>
           <Text style={styles.breadcrumbText}>Home</Text>
           <Text style={styles.breadcrumbSeparator}> > </Text>
-          <Text style={styles.breadcrumbText}>{subject.title}</Text>
-          <Text style={styles.breadcrumbSeparator}> > </Text>
-          <Text style={styles.breadcrumbCurrent}>{lesson.title}</Text>
+          {subject && (
+            <>
+              <Text style={styles.breadcrumbText}>{subject.title}</Text>
+              <Text style={styles.breadcrumbSeparator}> > </Text>
+            </>
+          )}
+          <Text style={styles.breadcrumbCurrent}>{lesson?.title || 'Lesson'}</Text>
         </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.lessonInfo}>
-          <Text style={styles.lessonTitle}>{lesson.title}</Text>
-          <Text style={styles.lessonDescription}>{lesson.description}</Text>
+          <Text style={styles.lessonTitle}>{lesson?.title || 'Lesson'}</Text>
+          <Text style={styles.lessonDescription}>{lesson?.description || 'Loading lesson details...'}</Text>
           
           <View style={styles.lessonMeta}>
             <Text style={styles.metaText}>{topics.length} Topics</Text>
