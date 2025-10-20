@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, RefreshCw, Trophy } from 'lucide-react-native';
 import { useAppContext } from '../../contexts/AppContext';
-import { mockTopics } from '../../data/mockData';
+
+type QuizQuestion = {
+  id: string;
+  question: string;
+  options: string[];
+  correct_answer: string;
+  topic_id: string;
+  sarcastic_mode: boolean;
+};
 
 export default function QuizPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -14,53 +22,173 @@ export default function QuizPage() {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [score, setScore] = useState(0);
+  const [quizData, setQuizData] = useState<QuizQuestion[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [answeredCorrectly, setAnsweredCorrectly] = useState<boolean | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [totalScore, setTotalScore] = useState<any>(null);
+  const [userId] = useState(id); // Using topic id as user id for now
 
-  const topic = mockTopics.find(t => t.id === id);
-  const quiz = topic?.quiz;
+  useEffect(() => {
+    const fetchQuiz = async () => {
+      try {
+        const response = await fetch(
+          `http://localhost:8000/quiz/topic/${id}?user_id=${id}&sarcastic=false`,
+          {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch quiz data');
+        }
+        
+        const data = await response.json();
+        setQuizData(data);
+      } catch (err) {
+        console.error('Error fetching quiz:', err);
+        setError('Failed to load quiz. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQuiz();
+    fetchTotalScore();
+  }, [id]);
+
+  const currentQuiz = quizData[currentQuestion];
 
   const handleAnswerSelect = (answerIndex: number) => {
+    if (showResults) return;
     setSelectedAnswer(answerIndex);
   };
 
-  const handleSubmit = () => {
-    if (selectedAnswer === null || !quiz) return;
+  const handleSubmit = async () => {
+    if (selectedAnswer === null || !currentQuiz) return;
     
-    const isCorrect = selectedAnswer === quiz.correctAnswer;
-    const newScore = isCorrect ? 8 : 3;
-    setScore(newScore);
-    setShowResults(true);
+    setSubmitting(true);
     
-    updateProgress(isCorrect ? 50 : 20);
-    if (isCorrect && newScore >= 7) {
-      addBadge('Quiz Master');
+    try {
+      // Submit answer to backend
+      const response = await fetch('http://localhost:8000/quiz/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quiz_id: currentQuiz.id,
+          user_answer: currentQuiz.options[selectedAnswer],
+          user_id: userId,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to submit answer');
+      }
+      
+      const result = await response.json();
+      const isCorrect = result.is_correct;
+      const pointsEarned = isCorrect ? 8 : 3;
+      
+      setScore(prev => prev + pointsEarned);
+      setShowResults(true);
+      setAnsweredCorrectly(isCorrect);
+      
+      updateProgress(isCorrect ? 50 : 20);
+      if (isCorrect && pointsEarned >= 7) {
+        addBadge('Quiz Master');
+      }
+      
+      // Fetch updated score
+      await fetchTotalScore();
+    } catch (err) {
+      console.error('Error submitting answer:', err);
+      setError('Failed to submit answer. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const fetchTotalScore = async () => {
+    try {
+      const response = await fetch(
+        `http://localhost:8000/quiz/score/${userId}/${id}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+        }
+      );
+      
+      if (response.ok) {
+        const scoreData = await response.json();
+        setTotalScore(scoreData);
+      }
+    } catch (err) {
+      console.error('Error fetching score:', err);
+    }
+  };
+
+  const handleNextQuestion = () => {
+    if (currentQuestion < quizData.length - 1) {
+      setCurrentQuestion(prev => prev + 1);
+      setSelectedAnswer(null);
+      setShowResults(false);
+      setAnsweredCorrectly(null);
+    } else {
+      // Quiz completed
+      router.push(`/activity/${id}`);
     }
   };
 
   const handleRetry = () => {
     setSelectedAnswer(null);
     setShowResults(false);
-    setScore(0);
+    setAnsweredCorrectly(null);
   };
 
-  const handleContinue = () => {
-    router.push(`/activity/${id}`);
+  const getFeedback = () => {
+    if (answeredCorrectly === null) return '';
+    return answeredCorrectly 
+      ? 'Correct! Well done! 🎉' 
+      : `Incorrect. The correct answer is: ${currentQuiz?.correct_answer}`;
   };
 
-  if (!topic || !quiz) {
+  if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Text>Quiz not found</Text>
+      <SafeAreaView style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color="#8B5CF6" />
+        <Text style={styles.loadingText}>Loading quiz...</Text>
       </SafeAreaView>
     );
   }
 
-  const getFeedback = () => {
-    if (selectedAnswer === quiz.correctAnswer) {
-      return quiz.sarcasticFeedback.correct;
-    } else {
-      return quiz.sarcasticFeedback.incorrect[0];
-    }
-  };
+  if (error) {
+    return (
+      <SafeAreaView style={[styles.container, styles.center]}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => window.location.reload()}>
+          <RefreshCw size={20} color="#8B5CF6" />
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  if (!quizData.length) {
+    return (
+      <SafeAreaView style={[styles.container, styles.center]}>
+        <Text>No quiz questions available</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -68,85 +196,120 @@ export default function QuizPage() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft size={24} color="#1F2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Sarcastic Quiz</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>
+            Question {currentQuestion + 1} of {quizData.length}
+          </Text>
+          {totalScore && (
+            <View style={styles.scoreContainer}>
+              <Trophy size={16} color="#F59E0B" />
+              <Text style={styles.scoreText}>
+                Score: {totalScore.total_score}/{totalScore.total_questions} ({totalScore.percentage}%)
+              </Text>
+            </View>
+          )}
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {!showResults ? (
-          <View style={styles.quizContainer}>
-            <View style={styles.questionCard}>
-              <Text style={styles.questionTitle}>Question</Text>
-              <Text style={styles.questionText}>{quiz.question}</Text>
-            </View>
+        <View style={styles.quizContainer}>
+          <View style={styles.questionCard}>
+            <Text style={styles.questionText}>{currentQuiz.question}</Text>
+          </View>
 
-            <View style={styles.optionsContainer}>
-              {quiz.options.map((option, index) => (
+          <View style={styles.optionsContainer}>
+            {currentQuiz.options.map((option, index) => {
+              const isSelected = selectedAnswer === index;
+              const isCorrect = option === currentQuiz.correct_answer;
+              const showCorrect = showResults && isCorrect;
+              const showIncorrect = showResults && isSelected && !isCorrect;
+
+              return (
                 <TouchableOpacity
                   key={index}
                   style={[
                     styles.optionButton,
-                    selectedAnswer === index && styles.selectedOption
+                    isSelected && styles.selectedOption,
+                    showCorrect && styles.correctOption,
+                    showIncorrect && styles.incorrectOption,
                   ]}
                   onPress={() => handleAnswerSelect(index)}
+                  disabled={showResults}
                 >
-                  <View style={styles.optionNumber}>
-                    <Text style={styles.optionNumberText}>{String.fromCharCode(65 + index)}</Text>
+                  <View style={[
+                    styles.optionNumber,
+                    showCorrect && styles.correctOptionNumber,
+                    showIncorrect && styles.incorrectOptionNumber,
+                  ]}>
+                    <Text style={[
+                      styles.optionNumberText,
+                      showCorrect && styles.correctOptionText,
+                      showIncorrect && styles.incorrectOptionText,
+                    ]}>
+                      {String.fromCharCode(65 + index)}
+                    </Text>
                   </View>
                   <Text style={[
                     styles.optionText,
-                    selectedAnswer === index && styles.selectedOptionText
+                    isSelected && styles.selectedOptionText,
+                    showCorrect && styles.correctOptionText,
+                    showIncorrect && styles.incorrectOptionText,
                   ]}>
                     {option}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
+              );
+            })}
+          </View>
 
+          {!showResults ? (
             <TouchableOpacity
               style={[
                 styles.submitButton,
-                selectedAnswer === null && styles.disabledButton
+                (selectedAnswer === null || submitting) && styles.disabledButton
               ]}
               onPress={handleSubmit}
-              disabled={selectedAnswer === null}
+              disabled={selectedAnswer === null || submitting}
             >
-              <Text style={styles.submitButtonText}>Submit Answer</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.resultsContainer}>
-            <View style={styles.scoreCard}>
-              <Trophy size={48} color="#F59E0B" />
-              <Text style={styles.scoreTitle}>Your Score</Text>
-              <Text style={styles.scoreNumber}>{score}/10</Text>
-              
-              <View style={[
-                styles.scoreBadge,
-                score >= 7 ? styles.goodScore : styles.poorScore
-              ]}>
-                <Text style={styles.scoreBadgeText}>
-                  {score >= 7 ? 'Well Done!' : 'Keep Trying!'}
+              {submitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.submitButtonText}>
+                  {currentQuestion === quizData.length - 1 ? 'Finish Quiz' : 'Submit Answer'}
                 </Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.resultsContainer}>
+              <View style={styles.feedbackCard}>
+                <Text style={styles.feedbackTitle}>
+                  {answeredCorrectly ? 'Correct! 🎉' : 'Incorrect'}
+                </Text>
+                <Text style={styles.feedbackText}>{getFeedback()}</Text>
+              </View>
+
+              <View style={styles.resultActions}>
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.retryButton]} 
+                  onPress={handleRetry}
+                >
+                  <RefreshCw size={20} color="#8B5CF6" />
+                  <Text style={styles.retryButtonText}>Try Again</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.continueButton]} 
+                  onPress={handleNextQuestion}
+                >
+                  <Text style={styles.continueButtonText}>
+                    {currentQuestion < quizData.length - 1 ? 'Next Question' : 'Finish'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
-
-            <View style={styles.feedbackCard}>
-              <Text style={styles.feedbackTitle}>Sarcastic Feedback</Text>
-              <Text style={styles.feedbackText}>{getFeedback()}</Text>
-            </View>
-
-            <View style={styles.resultActions}>
-              <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-                <RefreshCw size={20} color="#8B5CF6" />
-                <Text style={styles.retryButtonText}>Try Again</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-                <Text style={styles.continueButtonText}>Continue to Activity</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -156,6 +319,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F3F4F6',
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#4B5563',
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -167,10 +346,26 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   headerTitle: {
-    flex: 1,
     fontSize: 18,
     fontWeight: '600',
     color: '#1F2937',
+    textAlign: 'center',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  scoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  scoreText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#F59E0B',
+    marginLeft: 4,
   },
   content: {
     flex: 1,
@@ -190,40 +385,35 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  questionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#8B5CF6',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
   questionText: {
     fontSize: 18,
-    lineHeight: 26,
     color: '#1F2937',
-    textAlign: 'center',
+    lineHeight: 26,
   },
   optionsContainer: {
-    gap: 12,
-    marginBottom: 32,
+    marginBottom: 24,
   },
   optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 2,
+    marginBottom: 12,
+    borderWidth: 1,
     borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
   selectedOption: {
-    borderColor: '#3B82F6',
-    backgroundColor: '#EEF2FF',
+    borderColor: '#8B5CF6',
+    backgroundColor: '#F5F3FF',
+  },
+  correctOption: {
+    borderColor: '#10B981',
+    backgroundColor: '#ECFDF5',
+  },
+  incorrectOption: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
   },
   optionNumber: {
     width: 32,
@@ -234,26 +424,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
   },
+  correctOptionNumber: {
+    backgroundColor: '#10B981',
+  },
+  incorrectOptionNumber: {
+    backgroundColor: '#EF4444',
+  },
   optionNumberText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#4B5563',
+  },
+  correctOptionText: {
+    color: '#065F46',
+  },
+  incorrectOptionText: {
+    color: '#991B1B',
   },
   optionText: {
     flex: 1,
     fontSize: 16,
     color: '#1F2937',
-    lineHeight: 22,
+    lineHeight: 24,
   },
   selectedOptionText: {
-    color: '#3B82F6',
+    color: '#7C3AED',
     fontWeight: '500',
   },
   submitButton: {
     backgroundColor: '#8B5CF6',
     borderRadius: 12,
-    padding: 16,
+    padding: 18,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   disabledButton: {
     backgroundColor: '#D1D5DB',
@@ -264,53 +467,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   resultsContainer: {
-    paddingBottom: 40,
-  },
-  scoreCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 32,
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  scoreTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#6B7280',
     marginTop: 16,
-    marginBottom: 8,
-  },
-  scoreNumber: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 16,
-  },
-  scoreBadge: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  goodScore: {
-    backgroundColor: '#DCFCE7',
-  },
-  poorScore: {
-    backgroundColor: '#FEE2E2',
-  },
-  scoreBadgeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
   },
   feedbackCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 20,
+    padding: 24,
     marginBottom: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -319,45 +481,47 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   feedbackTitle: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '600',
-    color: '#8B5CF6',
+    color: '#1F2937',
     marginBottom: 12,
+    textAlign: 'center',
   },
   feedbackText: {
     fontSize: 16,
+    color: '#4B5563',
     lineHeight: 24,
-    color: '#374151',
-    fontStyle: 'italic',
+    textAlign: 'center',
   },
   resultActions: {
-    gap: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
   },
-  retryButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+  actionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    borderWidth: 2,
-    borderColor: '#8B5CF6',
+    padding: 16,
+    borderRadius: 12,
+    marginHorizontal: 4,
   },
-  retryButtonText: {
-    color: '#8B5CF6',
-    fontSize: 16,
-    fontWeight: '600',
+  retryButton: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   continueButton: {
-    backgroundColor: '#10B981',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+  },
+  retryButtonText: {
+    color: '#4B5563',
+    marginLeft: 8,
+    fontWeight: '600',
   },
   continueButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
     fontWeight: '600',
   },
 });

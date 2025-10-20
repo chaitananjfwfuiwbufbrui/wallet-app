@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Send, Bot, User } from 'lucide-react-native';
@@ -12,21 +12,14 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-const sarcasticQuestions = [
-  "Oh, so you think you understand vectors now? Tell me, what happens when you add two vectors that are pointing in completely opposite directions? Don't overthink it... or do, I'm not your math teacher.",
-  "Fascinating! Now explain to me why the dot product of two perpendicular vectors is zero. And please, try to sound like you actually know what you're talking about.",
-  "Here's a brain teaser for you: If vector A has magnitude 5 and vector B has magnitude 3, what's the maximum possible magnitude of their sum? Bonus points if you don't just guess randomly.",
-  "Let's see if you were paying attention. What's the geometric interpretation of the cross product? And no, 'it makes things perpendicular' isn't a complete answer.",
-  "Final question, because I'm getting tired of this conversation: Give me a real-world example where vector operations are actually useful. And 'homework problems' doesn't count."
-];
-
-const sarcasticResponses = [
-  "Well, well, well... that's actually not terrible. I'm mildly impressed.",
-  "Hmm, you're getting warmer. Like a frozen pizza that's been in the oven for 30 seconds.",
-  "That's... surprisingly decent. Did you actually study or just get lucky?",
-  "Not bad! You might actually survive a real math class. Might.",
-  "Okay, I'll admit it. That was a solid answer. Don't let it go to your head though."
-];
+type SarcasticQuestion = {
+  id: string;
+  question: string;
+  options: string[];
+  correct_answer: string;
+  topic_id: string;
+  sarcastic_mode: boolean;
+};
 
 export default function SarcasticQuestionsPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,7 +29,7 @@ export default function SarcasticQuestionsPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
-      text: "Alright, let's see if you actually learned anything from that topic. I've got some questions for you, and I expect real answers, not just random guesses. Ready?",
+      text: "Alright, let's see if you actually learned anything from that topic. I've got some sarcastic questions for you, and I expect real answers, not just random guesses. Ready?",
       isUser: false,
       timestamp: new Date()
     }
@@ -44,9 +37,13 @@ export default function SarcasticQuestionsPage() {
   const [currentInput, setCurrentInput] = useState('');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [sarcasticQuestions, setSarcasticQuestions] = useState<SarcasticQuestion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [userId] = useState(id);
 
-  const handleSendMessage = () => {
-    if (!currentInput.trim()) return;
+  const handleSendMessage = async () => {
+    if (!currentInput.trim() || submitting) return;
 
     // Add user message
     const userMessage: ChatMessage = {
@@ -57,68 +54,147 @@ export default function SarcasticQuestionsPage() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const userAnswer = currentInput.trim();
     setCurrentInput('');
+    setSubmitting(true);
 
-    // Add AI response after a short delay
-    setTimeout(() => {
-      const responseText = sarcasticResponses[Math.floor(Math.random() * sarcasticResponses.length)];
-      const aiResponse: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        text: responseText,
+    try {
+      // Submit answer to backend
+      const currentQuestion = sarcasticQuestions[currentQuestionIndex];
+      const response = await fetch('http://localhost:8000/quiz/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quiz_id: currentQuestion.id,
+          user_answer: userAnswer,
+          user_id: userId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit answer');
+      }
+
+      const result = await response.json();
+      
+      // Add AI response after a short delay
+      setTimeout(() => {
+        const responseText = result.is_correct 
+          ? "Well, well, well... that's actually not terrible. I'm mildly impressed. "
+          : `Hmm, not quite. The correct answer is: ${currentQuestion.correct_answer}. Better luck next time! `;
+        
+        const aiResponse: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          text: responseText,
+          isUser: false,
+          timestamp: new Date()
+        };
+
+        setMessages(prev => [...prev, aiResponse]);
+
+        // Add next question or complete
+        setTimeout(() => {
+          if (currentQuestionIndex < sarcasticQuestions.length - 1) {
+            const nextQuestion: ChatMessage = {
+              id: (Date.now() + 2).toString(),
+              text: sarcasticQuestions[currentQuestionIndex + 1].question,
+              isUser: false,
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, nextQuestion]);
+            setCurrentQuestionIndex(prev => prev + 1);
+          } else {
+            // Complete the session
+            const completionMessage: ChatMessage = {
+              id: (Date.now() + 2).toString(),
+              text: "Well, that wasn't completely awful. You've survived my sarcastic interrogation. Congratulations, I guess? ",
+              isUser: false,
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, completionMessage]);
+            setIsCompleted(true);
+            updateProgress(100);
+            addBadge('Sarcasm Survivor');
+          }
+          setSubmitting(false);
+        }, 1000);
+      }, 1500);
+    } catch (err) {
+      console.error('Error submitting answer:', err);
+      const errorMessage: ChatMessage = {
+        id: Date.now().toString(),
+        text: 'Oops! Something went wrong. Try again.',
         isUser: false,
         timestamp: new Date()
       };
-
-      setMessages(prev => [...prev, aiResponse]);
-
-      // Add next question or complete
-      setTimeout(() => {
-        if (currentQuestionIndex < sarcasticQuestions.length - 1) {
-          const nextQuestion: ChatMessage = {
-            id: (Date.now() + 2).toString(),
-            text: sarcasticQuestions[currentQuestionIndex + 1],
-            isUser: false,
-            timestamp: new Date()
-          };
-          setMessages(prev => [...prev, nextQuestion]);
-          setCurrentQuestionIndex(prev => prev + 1);
-        } else {
-          // Complete the session
-          const completionMessage: ChatMessage = {
-            id: (Date.now() + 2).toString(),
-            text: "Well, that wasn't completely awful. You've survived my sarcastic interrogation. Congratulations, I guess? 🎉",
-            isUser: false,
-            timestamp: new Date()
-          };
-          setMessages(prev => [...prev, completionMessage]);
-          setIsCompleted(true);
-          updateProgress(100);
-          addBadge('Sarcasm Survivor');
-        }
-      }, 1000);
-    }, 1500);
+      setMessages(prev => [...prev, errorMessage]);
+      setSubmitting(false);
+    }
   };
 
   const handleComplete = () => {
     router.back();
   };
 
-  React.useEffect(() => {
-    // Add first question after initial greeting
-    const timer = setTimeout(() => {
-      if (messages.length === 1) {
-        const firstQuestion: ChatMessage = {
+  useEffect(() => {
+    const fetchSarcasticQuestions = async () => {
+      try {
+        const response = await fetch(
+          `http://localhost:8000/quiz/sarcastic/${id}?user_id=${id}`,
+          {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch sarcastic questions');
+        }
+        
+        const data = await response.json();
+        setSarcasticQuestions(data);
+        
+        // Add first question after initial greeting
+        setTimeout(() => {
+          if (data.length > 0) {
+            const firstQuestion: ChatMessage = {
+              id: '2',
+              text: data[0].question,
+              isUser: false,
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, firstQuestion]);
+          }
+        }, 2000);
+      } catch (err) {
+        console.error('Error fetching sarcastic questions:', err);
+        const errorMessage: ChatMessage = {
           id: '2',
-          text: sarcasticQuestions[0],
+          text: 'Sorry, I couldn\'t load the sarcastic questions. Please try again later.',
           isUser: false,
           timestamp: new Date()
         };
-        setMessages(prev => [...prev, firstQuestion]);
+        setMessages(prev => [...prev, errorMessage]);
+      } finally {
+        setLoading(false);
       }
-    }, 2000);
+    };
 
-    return () => clearTimeout(timer);
-  }, []);
+    fetchSarcasticQuestions();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#8B5CF6" />
+        <Text style={styles.loadingText}>Loading sarcastic questions...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -182,11 +258,15 @@ export default function SarcasticQuestionsPage() {
               maxLength={500}
             />
             <TouchableOpacity 
-              style={[styles.sendButton, !currentInput.trim() && styles.disabledButton]} 
+              style={[styles.sendButton, (!currentInput.trim() || submitting) && styles.disabledButton]} 
               onPress={handleSendMessage}
-              disabled={!currentInput.trim()}
+              disabled={!currentInput.trim() || submitting}
             >
-              <Send size={20} color="#FFFFFF" />
+              {submitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Send size={20} color="#FFFFFF" />
+              )}
             </TouchableOpacity>
           </View>
         ) : (
@@ -205,6 +285,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F3F4F6',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#4B5563',
   },
   header: {
     flexDirection: 'row',
