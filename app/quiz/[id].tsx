@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, RefreshCw, Trophy } from 'lucide-react-native';
@@ -19,16 +19,14 @@ export default function QuizPage() {
   const router = useRouter();
   const { updateProgress, addBadge } = useAppContext();
   
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [userAnswers, setUserAnswers] = useState<{[key: number]: string}>({});
   const [showResults, setShowResults] = useState(false);
-  const [score, setScore] = useState(0);
   const [quizData, setQuizData] = useState<QuizQuestion[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [answeredCorrectly, setAnsweredCorrectly] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [totalScore, setTotalScore] = useState<any>(null);
+  const [batchResult, setBatchResult] = useState<any>(null);
   const [userId] = useState(id); // Using topic id as user id for now
 
   useEffect(() => {
@@ -59,106 +57,86 @@ export default function QuizPage() {
     };
 
     fetchQuiz();
-    fetchTotalScore();
   }, [id]);
 
   const currentQuiz = quizData[currentQuestion];
 
   const handleAnswerSelect = (answerIndex: number) => {
     if (showResults) return;
-    setSelectedAnswer(answerIndex);
-  };
-
-  const handleSubmit = async () => {
-    if (selectedAnswer === null || !currentQuiz) return;
-    
-    setSubmitting(true);
-    
-    try {
-      // Submit answer to backend
-      const response = await fetch('http://localhost:8000/quiz/submit', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          quiz_id: currentQuiz.id,
-          user_answer: currentQuiz.options[selectedAnswer],
-          user_id: userId,
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to submit answer');
-      }
-      
-      const result = await response.json();
-      const isCorrect = result.is_correct;
-      const pointsEarned = isCorrect ? 8 : 3;
-      
-      setScore(prev => prev + pointsEarned);
-      setShowResults(true);
-      setAnsweredCorrectly(isCorrect);
-      
-      updateProgress(isCorrect ? 50 : 20);
-      if (isCorrect && pointsEarned >= 7) {
-        addBadge('Quiz Master');
-      }
-      
-      // Fetch updated score
-      await fetchTotalScore();
-    } catch (err) {
-      console.error('Error submitting answer:', err);
-      setError('Failed to submit answer. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const fetchTotalScore = async () => {
-    try {
-      const response = await fetch(
-        `http://localhost:8000/quiz/score/${userId}/${id}`,
-        {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-        }
-      );
-      
-      if (response.ok) {
-        const scoreData = await response.json();
-        setTotalScore(scoreData);
-      }
-    } catch (err) {
-      console.error('Error fetching score:', err);
-    }
+    setUserAnswers(prev => ({
+      ...prev,
+      [currentQuestion]: currentQuiz.options[answerIndex]
+    }));
   };
 
   const handleNextQuestion = () => {
     if (currentQuestion < quizData.length - 1) {
       setCurrentQuestion(prev => prev + 1);
-      setSelectedAnswer(null);
-      setShowResults(false);
-      setAnsweredCorrectly(null);
-    } else {
-      // Quiz completed
-      router.push(`/activity/${id}`);
     }
   };
 
-  const handleRetry = () => {
-    setSelectedAnswer(null);
-    setShowResults(false);
-    setAnsweredCorrectly(null);
+  const handlePreviousQuestion = () => {
+    if (currentQuestion > 0) {
+      setCurrentQuestion(prev => prev - 1);
+    }
   };
 
-  const getFeedback = () => {
-    if (answeredCorrectly === null) return '';
-    return answeredCorrectly 
-      ? 'Correct! Well done! 🎉' 
-      : `Incorrect. The correct answer is: ${currentQuiz?.correct_answer}`;
+  const handleSubmitAll = async () => {
+    // Check if all questions are answered
+    if (Object.keys(userAnswers).length !== quizData.length) {
+      setError('Please answer all questions before submitting.');
+      return;
+    }
+    
+    setSubmitting(true);
+    
+    try {
+      // Prepare batch submission
+      const answers = quizData.map((quiz, index) => ({
+        quiz_id: quiz.id,
+        user_answer: userAnswers[index]
+      }));
+
+      const response = await fetch('http://localhost:8000/quiz/submit-batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          topic_id: id,
+          answers: answers
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to submit quiz');
+      }
+      
+      const result = await response.json();
+      setBatchResult(result);
+      setShowResults(true);
+      
+      updateProgress(result.score_percentage);
+      if (result.score_percentage >= 70) {
+        addBadge('Quiz Master');
+      }
+    } catch (err) {
+      console.error('Error submitting quiz:', err);
+      setError('Failed to submit quiz. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isAnswered = (questionIndex: number) => {
+    return userAnswers.hasOwnProperty(questionIndex);
+  };
+
+  const getSelectedIndex = (questionIndex: number) => {
+    const answer = userAnswers[questionIndex];
+    if (!answer) return null;
+    return quizData[questionIndex]?.options.indexOf(answer) ?? null;
   };
 
   if (loading) {
@@ -200,14 +178,9 @@ export default function QuizPage() {
           <Text style={styles.headerTitle}>
             Question {currentQuestion + 1} of {quizData.length}
           </Text>
-          {totalScore && (
-            <View style={styles.scoreContainer}>
-              <Trophy size={16} color="#F59E0B" />
-              <Text style={styles.scoreText}>
-                Score: {totalScore.total_score}/{totalScore.total_questions} ({totalScore.percentage}%)
-              </Text>
-            </View>
-          )}
+          <Text style={styles.answeredText}>
+            Answered: {Object.keys(userAnswers).length}/{quizData.length}
+          </Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
@@ -220,10 +193,8 @@ export default function QuizPage() {
 
           <View style={styles.optionsContainer}>
             {currentQuiz.options.map((option, index) => {
-              const isSelected = selectedAnswer === index;
-              const isCorrect = option === currentQuiz.correct_answer;
-              const showCorrect = showResults && isCorrect;
-              const showIncorrect = showResults && isSelected && !isCorrect;
+              const selectedIndex = getSelectedIndex(currentQuestion);
+              const isSelected = selectedIndex === index;
 
               return (
                 <TouchableOpacity
@@ -231,21 +202,17 @@ export default function QuizPage() {
                   style={[
                     styles.optionButton,
                     isSelected && styles.selectedOption,
-                    showCorrect && styles.correctOption,
-                    showIncorrect && styles.incorrectOption,
                   ]}
                   onPress={() => handleAnswerSelect(index)}
                   disabled={showResults}
                 >
                   <View style={[
                     styles.optionNumber,
-                    showCorrect && styles.correctOptionNumber,
-                    showIncorrect && styles.incorrectOptionNumber,
+                    isSelected && styles.selectedOptionNumber,
                   ]}>
                     <Text style={[
                       styles.optionNumberText,
-                      showCorrect && styles.correctOptionText,
-                      showIncorrect && styles.incorrectOptionText,
+                      isSelected && styles.selectedOptionNumberText,
                     ]}>
                       {String.fromCharCode(65 + index)}
                     </Text>
@@ -253,8 +220,6 @@ export default function QuizPage() {
                   <Text style={[
                     styles.optionText,
                     isSelected && styles.selectedOptionText,
-                    showCorrect && styles.correctOptionText,
-                    showIncorrect && styles.incorrectOptionText,
                   ]}>
                     {option}
                   </Text>
@@ -263,54 +228,105 @@ export default function QuizPage() {
             })}
           </View>
 
-          {!showResults ? (
+          <View style={styles.navigationButtons}>
             <TouchableOpacity
               style={[
-                styles.submitButton,
-                (selectedAnswer === null || submitting) && styles.disabledButton
+                styles.navButton,
+                currentQuestion === 0 && styles.disabledButton
               ]}
-              onPress={handleSubmit}
-              disabled={selectedAnswer === null || submitting}
+              onPress={handlePreviousQuestion}
+              disabled={currentQuestion === 0}
             >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitButtonText}>
-                  {currentQuestion === quizData.length - 1 ? 'Finish Quiz' : 'Submit Answer'}
-                </Text>
-              )}
+              <Text style={styles.navButtonText}>Previous</Text>
             </TouchableOpacity>
-          ) : (
-            <View style={styles.resultsContainer}>
-              <View style={styles.feedbackCard}>
-                <Text style={styles.feedbackTitle}>
-                  {answeredCorrectly ? 'Correct! 🎉' : 'Incorrect'}
-                </Text>
-                <Text style={styles.feedbackText}>{getFeedback()}</Text>
-              </View>
-
-              <View style={styles.resultActions}>
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.retryButton]} 
-                  onPress={handleRetry}
-                >
-                  <RefreshCw size={20} color="#8B5CF6" />
-                  <Text style={styles.retryButtonText}>Try Again</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.continueButton]} 
-                  onPress={handleNextQuestion}
-                >
-                  <Text style={styles.continueButtonText}>
-                    {currentQuestion < quizData.length - 1 ? 'Next Question' : 'Finish'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+            
+            {currentQuestion < quizData.length - 1 ? (
+              <TouchableOpacity
+                style={styles.navButton}
+                onPress={handleNextQuestion}
+              >
+                <Text style={styles.navButtonText}>Next</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  (Object.keys(userAnswers).length !== quizData.length || submitting) && styles.disabledButton
+                ]}
+                onPress={handleSubmitAll}
+                disabled={Object.keys(userAnswers).length !== quizData.length || submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Submit All</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </ScrollView>
+
+      {/* Results Modal */}
+      <Modal
+        visible={showResults}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowResults(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Trophy size={48} color="#F59E0B" />
+              <Text style={styles.modalTitle}>Quiz Complete!</Text>
+            </View>
+            
+            {batchResult && (
+              <View style={styles.scoreDetails}>
+                <Text style={styles.scoreLabel}>Your Score</Text>
+                <Text style={styles.scoreValue}>
+                  {batchResult.correct_answers}/{batchResult.total_questions}
+                </Text>
+                <Text style={styles.percentageText}>
+                  {batchResult.score_percentage}%
+                </Text>
+                
+                <View style={styles.divider} />
+                
+                <Text style={styles.resultMessage}>
+                  {batchResult.score_percentage >= 80
+                    ? 'Excellent work! 🎉'
+                    : batchResult.score_percentage >= 60
+                    ? 'Good job! Keep practicing! 👍'
+                    : 'Keep learning! You can do better! 💪'}
+                </Text>
+              </View>
+            )}
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.sarcasticButton}
+                onPress={() => {
+                  setShowResults(false);
+                  router.push(`/sarcastic/${id}`);
+                }}
+              >
+                <Text style={styles.sarcasticButtonText}>Try Sarcastic Questions</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.backToTopicsButton}
+                onPress={() => {
+                  setShowResults(false);
+                  router.back();
+                }}
+              >
+                <Text style={styles.backToTopicsButtonText}>Back to Topics</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -522,6 +538,125 @@ const styles = StyleSheet.create({
   },
   continueButtonText: {
     color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  answeredText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  selectedOptionNumber: {
+    backgroundColor: '#8B5CF6',
+  },
+  selectedOptionNumberText: {
+    color: '#FFFFFF',
+  },
+  navigationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+    gap: 12,
+  },
+  navButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  navButtonText: {
+    color: '#1F2937',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 32,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginTop: 16,
+  },
+  scoreDetails: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  scoreLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  scoreValue: {
+    fontSize: 48,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  percentageText: {
+    fontSize: 32,
+    fontWeight: '600',
+    color: '#8B5CF6',
+    marginTop: 8,
+  },
+  divider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 20,
+  },
+  resultMessage: {
+    fontSize: 16,
+    color: '#4B5563',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  modalActions: {
+    gap: 12,
+  },
+  sarcasticButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  sarcasticButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backToTopicsButton: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  backToTopicsButtonText: {
+    color: '#1F2937',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

@@ -61,7 +61,7 @@ export default function SarcasticQuestionsPage() {
     try {
       // Submit answer to backend
       const currentQuestion = sarcasticQuestions[currentQuestionIndex];
-      const response = await fetch('http://localhost:8000/quiz/submit', {
+      const response = await fetch('http://localhost:8000/quiz/evaluate-sarcastic', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -81,9 +81,12 @@ export default function SarcasticQuestionsPage() {
       
       // Add AI response after a short delay
       setTimeout(() => {
-        const responseText = result.is_correct 
-          ? "Well, well, well... that's actually not terrible. I'm mildly impressed. "
-          : `Hmm, not quite. The correct answer is: ${currentQuestion.correct_answer}. Better luck next time! `;
+        let responseText = '';
+        if (result.evaluation_score >= 7) {
+          responseText = `${result.feedback} Score: ${result.evaluation_score}/10 ✅`;
+        } else {
+          responseText = `${result.feedback} Score: ${result.evaluation_score}/10 ❌\n\n${result.explanation || ''}`;
+        }
         
         const aiResponse: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -109,7 +112,7 @@ export default function SarcasticQuestionsPage() {
             // Complete the session
             const completionMessage: ChatMessage = {
               id: (Date.now() + 2).toString(),
-              text: "Well, that wasn't completely awful. You've survived my sarcastic interrogation. Congratulations, I guess? ",
+              text: "Well, that wasn't completely awful. You've survived my sarcastic interrogation. Now, if you think you're done with this topic, go ahead and mark it as complete! 🎉",
               isUser: false,
               timestamp: new Date()
             };
@@ -131,6 +134,40 @@ export default function SarcasticQuestionsPage() {
       };
       setMessages(prev => [...prev, errorMessage]);
       setSubmitting(false);
+    }
+  };
+
+  const handleMarkComplete = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/spaced-repetition/mark-complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          topic_id: id,
+          quality: 4, // Default quality rating
+        }),
+      });
+
+      if (response.ok) {
+        // Show success message
+        const successMessage: ChatMessage = {
+          id: Date.now().toString(),
+          text: '✅ Topic marked as complete! You\'ll see this again based on spaced repetition.',
+          isUser: false,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, successMessage]);
+        
+        // Navigate back after a delay
+        setTimeout(() => {
+          router.back();
+        }, 2000);
+      }
+    } catch (err) {
+      console.error('Error marking complete:', err);
     }
   };
 
@@ -271,8 +308,11 @@ export default function SarcasticQuestionsPage() {
           </View>
         ) : (
           <View style={styles.completionContainer}>
-            <TouchableOpacity style={styles.completeButton} onPress={handleComplete}>
-              <Text style={styles.completeButtonText}>Continue Learning</Text>
+            <TouchableOpacity style={styles.completeButton} onPress={handleMarkComplete}>
+              <Text style={styles.completeButtonText}>Mark Topic as Complete</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.backButton2} onPress={handleComplete}>
+              <Text style={styles.backButtonText}>Back to Topics</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -400,6 +440,20 @@ const styles = StyleSheet.create({
   },
   completeButtonText: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backButton2: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  backButtonText: {
+    color: '#1F2937',
     fontSize: 16,
     fontWeight: '600',
   },
