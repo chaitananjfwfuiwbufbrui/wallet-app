@@ -86,6 +86,11 @@ export default function ProfilePage() {
               <Text style={styles.settingText}>Offline Content</Text>
               <Text style={styles.settingValue}>Sync</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+              <LogOut size={20} color="#EF4444" />
+              <Text style={styles.signOutText}>Sign Out</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -216,5 +221,22 @@ const styles = StyleSheet.create({
   settingValue: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  signOutButton: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  signOutText: {
+    fontSize: 16,
+    color: '#EF4444',
+    fontWeight: '600',
   },
 });
