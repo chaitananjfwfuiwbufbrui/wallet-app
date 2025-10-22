@@ -1,9 +1,15 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, RotateCcw, CheckCircle, Clock } from 'lucide-react-native';
 import { useAppContext } from '../../contexts/AppContext';
+import { apiService } from '../../services/api';
+
+interface Flashcard {
+  front: string;
+  back: string;
+}
 
 export default function FlashcardsPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -12,26 +18,33 @@ export default function FlashcardsPage() {
   
   const [currentCard, setCurrentCard] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
-  const [completedCards, setCompletedCards] = useState<string[]>([]);
+  const [completedCards, setCompletedCards] = useState<number[]>([]);
+  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [userId] = useState(id); // Using topic id as user id for now
 
-  // Mock flashcard data - in real app, this would come from the topic
-  const flashcards = [
-    {
-      id: '1',
-      question: 'What is a vector?',
-      answer: 'A vector is a mathematical object that has both magnitude (length) and direction. Unlike scalars, which only have magnitude, vectors provide complete information about quantity and orientation in space.'
-    },
-    {
-      id: '2',
-      question: 'How do you calculate the dot product of two vectors?',
-      answer: 'The dot product is calculated using the formula: a · b = |a| × |b| × cos(θ), where θ is the angle between the vectors. In component form: a · b = a₁b₁ + a₂b₂ + a₃b₃.'
-    },
-    {
-      id: '3',
-      question: 'What does it mean when the dot product of two vectors is zero?',
-      answer: 'When the dot product of two vectors is zero, it means the vectors are perpendicular (orthogonal) to each other. This is because cos(90°) = 0.'
+  useEffect(() => {
+    fetchFlashcards();
+  }, [id]);
+
+  const fetchFlashcards = async () => {
+    try {
+      setLoading(true);
+      const data = await apiService.getFlashcards(id as string);
+      if (data && data.flashcards && data.flashcards.length > 0) {
+        setFlashcards(data.flashcards);
+        setError(null);
+      } else {
+        setError('No flashcards available for this topic');
+      }
+    } catch (err) {
+      console.error('Error fetching flashcards:', err);
+      setError('Failed to load flashcards');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const currentFlashcard = flashcards[currentCard];
 
@@ -39,9 +52,9 @@ export default function FlashcardsPage() {
     setShowAnswer(!showAnswer);
   };
 
-  const handleNext = (difficulty: 'easy' | 'medium' | 'hard') => {
-    if (!completedCards.includes(currentFlashcard.id)) {
-      setCompletedCards(prev => [...prev, currentFlashcard.id]);
+  const handleNext = async (difficulty: 'easy' | 'medium' | 'hard') => {
+    if (!completedCards.includes(currentCard)) {
+      setCompletedCards(prev => [...prev, currentCard]);
       updateProgress(20);
     }
 
@@ -49,6 +62,13 @@ export default function FlashcardsPage() {
       setCurrentCard(currentCard + 1);
       setShowAnswer(false);
     } else {
+      // Mark topic as complete with quality rating
+      const qualityMap = { easy: 5, medium: 3, hard: 1 };
+      try {
+        await apiService.markTopicComplete(userId as string, id as string, qualityMap[difficulty]);
+      } catch (err) {
+        console.error('Error marking topic complete:', err);
+      }
       incrementStreak();
       router.back();
     }
@@ -60,6 +80,30 @@ export default function FlashcardsPage() {
       setShowAnswer(false);
     }
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+        <Text style={styles.loadingText}>Loading flashcards...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || flashcards.length === 0) {
+    return (
+      <SafeAreaView style={[styles.container, styles.center]}>
+        <Text style={styles.errorText}>{error || 'No flashcards available'}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchFlashcards}>
+          <RotateCcw size={20} color="#3B82F6" />
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.backButtonAlt} onPress={() => router.back()}>
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -90,7 +134,7 @@ export default function FlashcardsPage() {
             {!showAnswer ? (
               <View style={styles.questionSide}>
                 <Text style={styles.cardLabel}>Question</Text>
-                <Text style={styles.questionText}>{currentFlashcard.question}</Text>
+                <Text style={styles.questionText}>{currentFlashcard.front}</Text>
                 <View style={styles.flipHint}>
                   <Text style={styles.flipText}>Tap to reveal answer</Text>
                   <RotateCcw size={16} color="#6B7280" />
@@ -99,7 +143,7 @@ export default function FlashcardsPage() {
             ) : (
               <View style={styles.answerSide}>
                 <Text style={styles.cardLabel}>Answer</Text>
-                <Text style={styles.answerText}>{currentFlashcard.answer}</Text>
+                <Text style={styles.answerText}>{currentFlashcard.back}</Text>
                 
                 <View style={styles.difficultyButtons}>
                   <TouchableOpacity 
@@ -314,5 +358,49 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     color: '#9CA3AF',
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#4B5563',
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 12,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  backButtonAlt: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#3B82F6',
+    borderRadius: 8,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

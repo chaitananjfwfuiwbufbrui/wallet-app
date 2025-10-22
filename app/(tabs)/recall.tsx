@@ -1,26 +1,61 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RotateCcw, CircleCheck as CheckCircle, Clock, ArrowRight, Calendar, BookOpen, Zap, HelpCircle, MessageSquare, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useAppContext } from '../../contexts/AppContext';
-import { mockRecallItems } from '../../data/mockData';
+import { apiService } from '../../services/api';
+
+interface SpacedRepetitionItem {
+  id: string;
+  user_id: string;
+  topic_id: string;
+  next_review_date: string;
+  last_attempt_date: string | null;
+  interval_days: number;
+  easiness_factor: number;
+  repetition_count: number;
+  streak: number;
+  quality: number | null;
+  topic_title: string;
+}
 
 export default function RecallPage() {
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [recallItems, setRecallItems] = useState<SpacedRepetitionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { incrementStreak, updateProgress } = useAppContext();
   const router = useRouter();
 
+  useEffect(() => {
+    fetchRecallItems();
+  }, []);
+
+  const fetchRecallItems = async () => {
+    try {
+      setLoading(true);
+      const items = await apiService.getAllSpacedRepetition();
+      setRecallItems(items);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching recall items:', err);
+      setError('Failed to load recall items');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Group items by date
-  const groupedItems = mockRecallItems.reduce((groups, item) => {
-    const dateKey = item.dueDate.toDateString();
+  const groupedItems = recallItems.reduce((groups, item) => {
+    const dateKey = new Date(item.next_review_date).toDateString();
     if (!groups[dateKey]) {
       groups[dateKey] = [];
     }
     groups[dateKey].push(item);
     return groups;
-  }, {} as Record<string, typeof mockRecallItems>);
+  }, {} as Record<string, SpacedRepetitionItem[]>);
 
   const sortedDates = Object.keys(groupedItems).sort((a, b) => 
     new Date(a).getTime() - new Date(b).getTime()
@@ -77,6 +112,35 @@ export default function RecallPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.emptySubtitle}>Loading recall schedule...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Error</Text>
+          <Text style={styles.emptySubtitle}>{error}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={fetchRecallItems}
+          >
+            <RotateCcw size={20} color="#3B82F6" />
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (sortedDates.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
@@ -125,11 +189,11 @@ export default function RecallPage() {
                     isOverdue(date) && styles.overdueCard,
                     isToday(date) && styles.todayCard
                   ]}
-                  onPress={() => handleTopicPress(item.topicId)}
+                  onPress={() => handleTopicPress(item.topic_id)}
                 >
                   <View style={styles.topicInfo}>
-                    <Text style={styles.topicTitle}>{item.topicTitle}</Text>
-                    <Text style={styles.subjectName}>{item.subjectName}</Text>
+                    <Text style={styles.topicTitle}>{item.topic_title}</Text>
+                    <Text style={styles.subjectName}>Streak: {item.streak} | Repetitions: {item.repetition_count}</Text>
                     
                     <View style={styles.topicMeta}>
                       <View style={styles.difficultyIndicator}>
@@ -138,17 +202,17 @@ export default function RecallPage() {
                             key={i}
                             style={[
                               styles.difficultyDot,
-                              i < item.difficulty && styles.difficultyDotActive
+                              i < Math.min(Math.floor(item.easiness_factor), 5) && styles.difficultyDotActive
                             ]}
                           />
                         ))}
                       </View>
                       
-                      {item.lastReviewed && (
+                      {item.last_attempt_date && (
                         <View style={styles.lastReviewedInfo}>
                           <Clock size={12} color="#6B7280" />
                           <Text style={styles.lastReviewedText}>
-                            {Math.floor((Date.now() - item.lastReviewed.getTime()) / (1000 * 60 * 60 * 24))}d ago
+                            {Math.floor((Date.now() - new Date(item.last_attempt_date).getTime()) / (1000 * 60 * 60 * 24))}d ago
                           </Text>
                         </View>
                       )}
@@ -358,6 +422,23 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3B82F6',
   },
   modalContainer: {
     flex: 1,

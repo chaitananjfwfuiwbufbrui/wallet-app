@@ -277,6 +277,107 @@ class ApiService {
   async regenerateCourse(topic: string, userId: string): Promise<CourseGenerationResponse> {
     return this.generateCourse(topic, userId);
   }
+
+  // Spaced Repetition APIs
+  async getAllSpacedRepetition(): Promise<any[]> {
+    const result = await this.fetchWithErrorHandling<any[]>('/spaced-repetition/all');
+    return result || [];
+  }
+
+  async getTodaysReviews(): Promise<any[]> {
+    const result = await this.fetchWithErrorHandling<any[]>('/spaced-repetition/today');
+    return result || [];
+  }
+
+  async markTopicComplete(userId: string, topicId: string, quality: number): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/spaced-repetition/mark-complete`, {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          topic_id: topicId,
+          quality: quality
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error marking topic complete:', error);
+      throw error;
+    }
+  }
+
+  // Flashcard APIs
+  async getFlashcards(topicId: string, regen: boolean = false): Promise<any> {
+    const result = await this.fetchWithErrorHandling<any>(`/flashcards/topic/${topicId}?regen=${regen}`);
+    return result || { flashcards: [] };
+  }
+
+  // Quiz APIs (already exist in quiz_router but adding convenience methods)
+  async getQuizForTopic(topicId: string, userId: string, sarcastic: boolean = false): Promise<any[]> {
+    const result = await this.fetchWithErrorHandling<any[]>(`/quiz/topic/${topicId}?user_id=${userId}&sarcastic=${sarcastic}`);
+    return result || [];
+  }
+
+  async submitQuizBatch(userId: string, topicId: string, answers: any[]): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz/submit-batch`, {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          topic_id: topicId,
+          answers: answers
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error submitting quiz batch:', error);
+      throw error;
+    }
+  }
+
+  async evaluateSarcasticAnswer(userId: string, quizId: string, userAnswer: string): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz/evaluate-sarcastic`, {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          quiz_id: quizId,
+          user_answer: userAnswer
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error evaluating sarcastic answer:', error);
+      throw error;
+    }
+  }
 }
 
 export const apiService = new ApiService();

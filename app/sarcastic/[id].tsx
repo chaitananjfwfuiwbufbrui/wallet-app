@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Send, Bot, User } from 'lucide-react-native';
 import { useAppContext } from '../../contexts/AppContext';
+import { apiService } from '../../services/api';
 
 interface ChatMessage {
   id: string;
@@ -61,23 +62,11 @@ export default function SarcasticQuestionsPage() {
     try {
       // Submit answer to backend
       const currentQuestion = sarcasticQuestions[currentQuestionIndex];
-      const response = await fetch('http://localhost:8000/quiz/evaluate-sarcastic', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          quiz_id: currentQuestion.id,
-          user_answer: userAnswer,
-          user_id: userId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to submit answer');
-      }
-
-      const result = await response.json();
+      const result = await apiService.evaluateSarcasticAnswer(
+        userId as string,
+        currentQuestion.id,
+        userAnswer
+      );
       
       // Add AI response after a short delay
       setTimeout(() => {
@@ -139,33 +128,21 @@ export default function SarcasticQuestionsPage() {
 
   const handleMarkComplete = async () => {
     try {
-      const response = await fetch('http://localhost:8000/spaced-repetition/mark-complete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          topic_id: id,
-          quality: 4, // Default quality rating
-        }),
-      });
-
-      if (response.ok) {
-        // Show success message
-        const successMessage: ChatMessage = {
-          id: Date.now().toString(),
-          text: '✅ Topic marked as complete! You\'ll see this again based on spaced repetition.',
-          isUser: false,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, successMessage]);
-        
-        // Navigate back after a delay
-        setTimeout(() => {
-          router.back();
-        }, 2000);
-      }
+      await apiService.markTopicComplete(userId as string, id as string, 4);
+      
+      // Show success message
+      const successMessage: ChatMessage = {
+        id: Date.now().toString(),
+        text: '✅ Topic marked as complete! You\'ll see this again based on spaced repetition.',
+        isUser: false,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, successMessage]);
+      
+      // Navigate back after a delay
+      setTimeout(() => {
+        router.back();
+      }, 2000);
     } catch (err) {
       console.error('Error marking complete:', err);
     }
@@ -178,21 +155,7 @@ export default function SarcasticQuestionsPage() {
   useEffect(() => {
     const fetchSarcasticQuestions = async () => {
       try {
-        const response = await fetch(
-          `http://localhost:8000/quiz/sarcastic/${id}?user_id=${id}`,
-          {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json',
-            },
-          }
-        );
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch sarcastic questions');
-        }
-        
-        const data = await response.json();
+        const data = await apiService.getQuizForTopic(id as string, userId as string, true);
         setSarcasticQuestions(data);
         
         // Add first question after initial greeting
