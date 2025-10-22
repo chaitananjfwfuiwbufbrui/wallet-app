@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AppProvider } from '../contexts/AppContext';
+import { AuthProvider } from '../contexts/AuthContext';
 import * as SplashScreen from 'expo-splash-screen';
 
 SplashScreen.preventAutoHideAsync();
@@ -28,19 +29,22 @@ export default function RootLayout() {
   }
 
   return (
-    <AppProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="subject/[id]" />
-        <Stack.Screen name="lesson/[id]" />
-        <Stack.Screen name="topic/[id]" />
-        <Stack.Screen name="quiz/[id]" />
-        <Stack.Screen name="sarcastic/[id]" />
-        <Stack.Screen name="flashcards/[id]" />
-        <Stack.Screen name="activity/[id]" />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </AppProvider>
+    <AuthProvider>
+      <AppProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="login" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="subject/[id]" />
+          <Stack.Screen name="lesson/[id]" />
+          <Stack.Screen name="topic/[id]" />
+          <Stack.Screen name="quiz/[id]" />
+          <Stack.Screen name="sarcastic/[id]" />
+          <Stack.Screen name="flashcards/[id]" />
+          <Stack.Screen name="activity/[id]" />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+        <StatusBar style="auto" />
+      </AppProvider>
+    </AuthProvider>
   );
 }
