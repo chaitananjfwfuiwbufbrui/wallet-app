@@ -1,5 +1,12 @@
 const API_BASE_URL = 'http://localhost:8000';
 
+// Token provider function - will be set by AuthContext
+let tokenProvider: (() => Promise<string | null>) | null = null;
+
+export function setTokenProvider(provider: () => Promise<string | null>) {
+  tokenProvider = provider;
+}
+
 // Fallback mock data when API is unavailable
 const MOCK_SUBJECTS = [
   {
@@ -137,13 +144,26 @@ export interface CourseGenerationResponse {
 }
 
 class ApiService {
+  private async getAuthHeaders(): Promise<HeadersInit> {
+    const headers: HeadersInit = {
+      'accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+
+    if (tokenProvider) {
+      const token = await tokenProvider();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+
+    return headers;
+  }
+
   private async fetchWithErrorHandling<T>(url: string): Promise<T | null> {
     try {
-      const response = await fetch(`${API_BASE_URL}${url}`, {
-        headers: {
-          'accept': 'application/json',
-        },
-      });
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}${url}`, { headers });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -159,11 +179,8 @@ class ApiService {
 
   async getSubjects(): Promise<ApiSubject[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/subjects/`, {
-        headers: {
-          'accept': 'application/json',
-        },
-      });
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/subjects/`, { headers });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

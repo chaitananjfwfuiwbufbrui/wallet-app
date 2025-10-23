@@ -1,11 +1,121 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Settings, Trophy, Clock, Target, Award, Moon, Bell, Download } from 'lucide-react-native';
+import { Settings, Trophy, Clock, Target, Award, Moon, Bell, Download, LogOut } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useAppContext } from '../../contexts/AppContext';
+import { useAuth } from '../../contexts/AuthContext';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+
+// Configure notification handler
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+async function registerForPushNotificationsAsync() {
+  if (Device.isDevice) {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      Alert.alert('Permission Required', 'Failed to get push notification permissions!');
+      return;
+    }
+    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    console.log('Push token:', token);
+    return token;
+  } else {
+    Alert.alert('Device Required', 'Must use physical device for Push Notifications');
+  }
+
+  if (Platform.OS === 'android') {
+    Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+    });
+  }
+}
 
 export default function ProfilePage() {
   const { userProgress } = useAppContext();
+  const { user, signOut } = useAuth();
+  const router = useRouter();
+  const [pushToken, setPushToken] = useState<string | undefined>();
+
+  // Register for push notifications on mount
+  useEffect(() => {
+    registerForPushNotificationsAsync().then(token => {
+      if (token) {
+        setPushToken(token);
+        // TODO: Send token to backend to store with user profile
+        console.log('Push notification token registered:', token);
+      }
+    });
+
+    // Set up notification listeners
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Notification received:', notification);
+    });
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification response:', response);
+    });
+
+    return () => {
+      Notifications.removeNotificationSubscription(notificationListener);
+      Notifications.removeNotificationSubscription(responseListener);
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut();
+              // Navigate to login screen after sign out
+              router.replace('/login');
+            } catch (error) {
+              console.error('Error signing out:', error);
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  // Get user initials for avatar
+  const getInitials = () => {
+    if (!user?.name) return 'U';
+    const names = user.name.split(' ');
+    if (names.length >= 2) {
+      return `${names[0][0]}${names[1][0]}`.toUpperCase();
+    }
+    return user.name.substring(0, 2).toUpperCase();
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -13,9 +123,14 @@ export default function ProfilePage() {
         <View style={styles.content}>
           <View style={styles.header}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>JD</Text>
+              {user?.photoUrl ? (
+                <Image source={{ uri: user.photoUrl }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>{getInitials()}</Text>
+              )}
             </View>
-            <Text style={styles.name}>John Doe</Text>
+            <Text style={styles.name}>{user?.name || 'User'}</Text>
+            <Text style={styles.email}>{user?.email || ''}</Text>
             <Text style={styles.level}>Level {userProgress.level} Learner</Text>
           </View>
 
@@ -121,6 +236,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   avatarText: {
     fontSize: 32,
@@ -132,6 +253,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1F2937',
     marginBottom: 4,
+  },
+  email: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
   },
   level: {
     fontSize: 16,
