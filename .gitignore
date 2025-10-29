@@ -33,3 +33,6 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+# Firebase private key
+sahayak-8367e-firebase-adminsdk-fbsvc-483d95846b.json
+

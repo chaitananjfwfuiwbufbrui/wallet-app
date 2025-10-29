@@ -1,142 +1,172 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Settings, Trophy, Clock, Target, Award, Moon, Bell, Download } from 'lucide-react-native';
-import { useAppContext } from '../../contexts/AppContext';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  Alert,
+  ScrollView,
+  TouchableOpacity,
+} from 'react-native';
+import messaging from '@react-native-firebase/messaging';
 
-export default function ProfilePage() {
-  const { userProgress } = useAppContext();
+export default function App() {
+  const [notification, setNotification] = useState<any>(null);
+  const [fcmToken, setFcmToken] = useState('');
 
+  // 🔹 Request permission for notifications
+  const requestUserPermission = async () => {
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+    if (enabled) console.log('Authorization status:', authStatus);
+    return enabled;
+  };
+
+  // 🔹 Get FCM token
+  const getFcmToken = async () => {
+    try {
+      const token = await messaging().getToken();
+      console.log('✅ FCM Token:', token);
+      setFcmToken(token);
+      // Optionally: send token to backend
+    } catch (error) {
+      console.error('❌ Error getting FCM token:', error);
+    }
+  };
+
+  useEffect(() => {
+    // 1️⃣ Ask permission and get token
+    requestUserPermission().then((enabled) => {
+      if (enabled) getFcmToken();
+      else Alert.alert('Permission Required', 'Please allow notifications.');
+    });
+
+    // 2️⃣ Foreground notifications
+    const unsubscribeOnMessage = messaging().onMessage(async (remoteMessage) => {
+      console.log('📩 Foreground notification:', remoteMessage);
+      const notif = remoteMessage.notification;
+      setNotification({
+        title: notif?.title || 'No Title',
+        body: notif?.body || '',
+        image: (notif as any)?.android?.imageUrl || (notif as any)?.imageUrl || null,
+      });
+    });
+
+    // 3️⃣ Background tap handler
+    const unsubscribeOnNotificationOpenedApp = messaging().onNotificationOpenedApp(
+      (remoteMessage) => {
+        console.log('📨 Notification opened (background):', remoteMessage.notification);
+        Alert.alert('Notification Tapped', remoteMessage.notification?.title || '');
+      }
+    );
+
+    // 4️⃣ Quit-state notification handler
+    messaging()
+      .getInitialNotification()
+      .then((remoteMessage) => {
+        if (remoteMessage) {
+          console.log('🚀 Notification caused app to open from quit state:', remoteMessage.notification);
+          Alert.alert('Opened from Quit', remoteMessage.notification?.title || '');
+        }
+      });
+
+    // 5️⃣ Background handler
+    messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+      console.log('🛠 Background message handled:', remoteMessage.notification);
+    });
+
+    return () => {
+      unsubscribeOnMessage();
+      unsubscribeOnNotificationOpenedApp();
+    };
+  }, []);
+
+  
+
+  // 📱 UI rendering
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>JD</Text>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.title}>🔥 Firebase Cloud Messaging Demo</Text>
+
+      <Text style={styles.label}>Your FCM Token:</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tokenContainer}>
+        <Text style={styles.token}>{fcmToken || 'Fetching token...'}</Text>
+      </ScrollView>
+
+      {notification ? (
+        <View style={styles.card}>
+          {notification.image ? (
+            <Image source={{ uri: notification.image }} style={styles.image} resizeMode="cover" />
+          ) : (
+            <View style={[styles.image, styles.imagePlaceholder]}>
+              <Text style={{ color: '#888' }}>🖼 No Image</Text>
             </View>
-            <Text style={styles.name}>John Doe</Text>
-            <Text style={styles.level}>Level {userProgress.level} Learner</Text>
-          </View>
-
-          <View style={styles.statsSection}>
-            <Text style={styles.sectionTitle}>Your Stats</Text>
-            
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <Trophy size={24} color="#F59E0B" />
-                <Text style={styles.statNumber}>{userProgress.xp}</Text>
-                <Text style={styles.statLabel}>Total XP</Text>
-              </View>
-              
-              <View style={styles.statCard}>
-                <Target size={24} color="#8B5CF6" />
-                <Text style={styles.statNumber}>{userProgress.topicsCompleted}</Text>
-                <Text style={styles.statLabel}>Topics Mastered</Text>
-              </View>
-              
-              <View style={styles.statCard}>
-                <Clock size={24} color="#10B981" />
-                <Text style={styles.statNumber}>{userProgress.totalTimeSpent}h</Text>
-                <Text style={styles.statLabel}>Time Spent</Text>
-              </View>
-              
-              <View style={styles.statCard}>
-                <Award size={24} color="#EF4444" />
-                <Text style={styles.statNumber}>{userProgress.streak}</Text>
-                <Text style={styles.statLabel}>Day Streak</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.badgesSection}>
-            <Text style={styles.sectionTitle}>Badges Earned</Text>
-            <View style={styles.badgesGrid}>
-              {userProgress.badges.map((badge, index) => (
-                <View key={index} style={styles.badge}>
-                  <Text style={styles.badgeText}>{badge}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.settingsSection}>
-            <Text style={styles.sectionTitle}>Settings</Text>
-            
-            <TouchableOpacity style={styles.settingItem}>
-              <Settings size={20} color="#6B7280" />
-              <Text style={styles.settingText}>Content Preferences</Text>
-              <Text style={styles.settingValue}>Text</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.settingItem}>
-              <Bell size={20} color="#6B7280" />
-              <Text style={styles.settingText}>Notifications</Text>
-              <Text style={styles.settingValue}>On</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.settingItem}>
-              <Moon size={20} color="#6B7280" />
-              <Text style={styles.settingText}>Dark Mode</Text>
-              <Text style={styles.settingValue}>Off</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.settingItem}>
-              <Download size={20} color="#6B7280" />
-              <Text style={styles.settingText}>Offline Content</Text>
-              <Text style={styles.settingValue}>Sync</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-              <LogOut size={20} color="#EF4444" />
-              <Text style={styles.signOutText}>Sign Out</Text>
-            </TouchableOpacity>
+          )}
+          <View style={styles.cardContent}>
+            <Text style={styles.cardTitle}>{notification.title}</Text>
+            <Text style={styles.cardBody}>{notification.body}</Text>
           </View>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      ) : (
+        <Text style={styles.noNotif}>No new notifications yet</Text>
+      )}
+
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => Alert.alert('Token copied (simulate sending to backend)!')}
+      >
+        <Text style={styles.buttonText}>📤 Send Token to Backend</Text>
+      </TouchableOpacity>
+
+      
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  content: { padding: 20, alignItems: 'center' },
+  title: { fontSize: 22, fontWeight: '700', color: '#111827', marginVertical: 10 },
+  label: { fontSize: 14, color: '#6B7280', marginTop: 10 },
+  tokenContainer: {
+    maxWidth: '100%',
+    backgroundColor: '#E5E7EB',
+    padding: 10,
+    borderRadius: 8,
+    marginVertical: 10,
   },
-  scrollView: {
-    flex: 1,
+  token: { fontSize: 12, color: '#374151' },
+  noNotif: { marginTop: 30, color: '#9CA3AF', fontSize: 14 },
+  card: {
+    width: '100%',
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+    marginVertical: 20,
   },
-  content: {
-    padding: 20,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#3B82F6',
+  image: { width: '100%', height: 180 },
+  imagePlaceholder: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    backgroundColor: '#F3F4F6',
   },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  cardContent: { padding: 15 },
+  cardTitle: { fontSize: 18, fontWeight: '600', color: '#111827' },
+  cardBody: { fontSize: 14, color: '#4B5563', marginTop: 6 },
+  button: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginTop: 10,
   },
-  name: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  level: {
-    fontSize: 16,
-    color: '#6B7280',
-  },
+  buttonText: { color: '#FFF', fontWeight: '600' },
   statsSection: {
     marginBottom: 32,
   },

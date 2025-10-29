@@ -8,8 +8,14 @@
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "host": "192.168.1.4",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "web": {
       "bundler": "metro",
@@ -19,13 +25,31 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#ffffff",
+          "sounds": []
+        }
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "android": {
-      "package": "com.pidugu2001.boltexponativewind"
+      "package": "com.pidugu2001.boltexponativewind",
+      "googleServicesFile": "./android/app/google-services.json",
+      "useNextNotificationsApi": true,
+      "permissions": ["POST_NOTIFICATIONS"]
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ff8049cc-01d9-4aba-98a0-d6080e274212"
+      }
     }
   }
 }

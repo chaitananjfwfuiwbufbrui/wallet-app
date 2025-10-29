@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "481188774537",
+    "project_id": "sahayak-8367e",
+    "storage_bucket": "sahayak-8367e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:481188774537:android:f4bbde197fee1f8ad8fc58",
+        "android_client_info": {
+          "package_name": "com.pidugu2001.boltexponativewinda"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyASqEIptfKDV6NbgG2MWBdLHjxKtrZ86VE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:481188774537:android:aca0e79ccf08ee92d8fc58",
+        "android_client_info": {
+          "package_name": "com.pidugu2001.fcftest"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyASqEIptfKDV6NbgG2MWBdLHjxKtrZ86VE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
