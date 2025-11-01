@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, RefreshCw, Trophy } from 'lucide-react-native';
 import { useAppContext } from '../../contexts/AppContext';
-
+import { API_BASE_URL } from '../../services/api';
 type QuizQuestion = {
   id: string;
   question: string;
@@ -33,7 +33,7 @@ export default function QuizPage() {
     const fetchQuiz = async () => {
       try {
         const response = await fetch(
-          `http://localhost:8000/quiz/topic/${id}?user_id=${id}&sarcastic=false`,
+          `${API_BASE_URL}/quiz/topic/${id}?user_id=${id}&sarcastic=false`,
           {
             method: 'GET',
             headers: {
@@ -97,7 +97,7 @@ export default function QuizPage() {
         user_answer: userAnswers[index]
       }));
 
-      const response = await fetch('http://localhost:8000/quiz/submit-batch', {
+      const response = await fetch(`${API_BASE_URL}/quiz/submit-batch`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

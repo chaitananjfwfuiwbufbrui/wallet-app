@@ -1,11 +1,177 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Settings, Trophy, Clock, Target, Award, Moon, Bell, Download } from 'lucide-react-native';
-import { useAppContext } from '../../contexts/AppContext';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  Alert,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+} from 'react-native';
+import messaging from '@react-native-firebase/messaging';
+import { useUser, useAuth } from '@clerk/clerk-expo';
+import { apiService } from '../../services/api';
+import { useRouter } from 'expo-router';
+// Mock icons (replace with actual icon library like react-native-vector-icons)
+const Trophy = ({ size, color }: any) => <Text style={{ fontSize: size, color }}>🏆</Text>;
+const Target = ({ size, color }: any) => <Text style={{ fontSize: size, color }}>🎯</Text>;
+const Clock = ({ size, color }: any) => <Text style={{ fontSize: size, color }}>⏰</Text>;
+const Award = ({ size, color }: any) => <Text style={{ fontSize: size, color }}>🏅</Text>;
+const Settings = ({ size, color }: any) => <Text style={{ fontSize: size, color }}>⚙️</Text>;
+const Bell = ({ size, color }: any) => <Text style={{ fontSize: size, color }}>🔔</Text>;
+const Moon = ({ size, color }: any) => <Text style={{ fontSize: size, color }}>🌙</Text>;
+const Download = ({ size, color }: any) => <Text style={{ fontSize: size, color }}>📥</Text>;
+const LogOut = ({ size, color }: any) => <Text style={{ fontSize: size, color }}>🚪</Text>;
 
 export default function ProfilePage() {
-  const { userProgress } = useAppContext();
+  const { user } = useUser();
+  const { signOut } = useAuth();
+  const [fcmToken, setFcmToken] = useState('');
+   const router = useRouter();
+  // Mock user progress data (replace with actual data from your backend)
+  const [userProgress] = useState({
+    level: 5,
+    xp: 2450,
+    topicsCompleted: 12,
+    totalTimeSpent: 45,
+    streak: 7,
+    badges: ['🔥 Week Warrior', '⭐ Fast Learner', '💎 Consistent', '🎓 Scholar'],
+  });
+
+  // 🔹 Request permission for notifications
+  const requestUserPermission = async () => {
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+    if (enabled) console.log('Authorization status:', authStatus);
+    return enabled;
+  };
+
+  // 🔹 Get FCM token
+  const getFcmToken = async () => {
+    try {
+      const token = await messaging().getToken();
+      console.log('✅ FCM Token:', token);
+      setFcmToken(token);
+      // TODO: Send token to backend to store with user profile
+    } catch (error) {
+      console.error('❌ Error getting FCM token:', error);
+    }
+  };
+
+  useEffect(() => {
+    // 1️⃣ Ask permission and get token
+    requestUserPermission().then((enabled) => {
+      if (enabled) getFcmToken();
+      else Alert.alert('Permission Required', 'Please allow notifications.');
+    });
+
+    // 2️⃣ Foreground notifications
+    const unsubscribeOnMessage = messaging().onMessage(async (remoteMessage) => {
+      console.log('📩 Foreground notification:', remoteMessage);
+      const notif = remoteMessage.notification;
+      Alert.alert(
+        notif?.title || 'Notification',
+        notif?.body || '',
+        [{ text: 'OK' }]
+      );
+    });
+
+    // 3️⃣ Background tap handler
+    const unsubscribeOnNotificationOpenedApp = messaging().onNotificationOpenedApp(
+      (remoteMessage) => {
+        console.log('📨 Notification opened (background):', remoteMessage.notification);
+        Alert.alert('Notification Tapped', remoteMessage.notification?.title || '');
+      }
+    );
+
+    // 4️⃣ Quit-state notification handler
+    messaging()
+      .getInitialNotification()
+      .then((remoteMessage) => {
+        if (remoteMessage) {
+          console.log('🚀 Notification caused app to open from quit state:', remoteMessage.notification);
+          Alert.alert('Opened from Quit', remoteMessage.notification?.title || '');
+        }
+      });
+
+    // 5️⃣ Background handler
+    messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+      console.log('🛠 Background message handled:', remoteMessage.notification);
+    });
+
+    return () => {
+      unsubscribeOnMessage();
+      unsubscribeOnNotificationOpenedApp();
+    };
+  }, []);
+
+  useEffect(() => {
+    const sendToken = async () => {
+      if (user?.id && fcmToken) {
+        try {
+          await apiService.savePushToken(user.id, fcmToken);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    };
+    sendToken();
+  }, [user?.id, fcmToken]);
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut();
+               router.replace('/login');
+              // Navigation will be handled by your auth flow
+            } catch (error) {
+              console.error('Error signing out:', error);
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const getDisplayName = () => {
+    if (user?.fullName && user.fullName.trim()) return user.fullName;
+    const first = user?.firstName?.trim();
+    const last = user?.lastName?.trim();
+    if (first || last) return [first, last].filter(Boolean).join(' ');
+    const email = user?.primaryEmailAddress?.emailAddress;
+    if (email) return email.split('@')[0];
+    return 'User';
+  };
+
+  const getInitials = () => {
+    if (user?.fullName && user.fullName.trim()) {
+      const names = user.fullName.trim().split(' ');
+      if (names.length >= 2) return `${names[0][0]}${names[1][0]}`.toUpperCase();
+      return names[0].substring(0, 2).toUpperCase();
+    }
+    const first = user?.firstName?.trim();
+    const last = user?.lastName?.trim();
+    if (first || last) return `${first?.[0] || ''}${last?.[0] || ''}`.toUpperCase() || 'U';
+    const email = user?.primaryEmailAddress?.emailAddress;
+    if (email) return email.substring(0, 2).toUpperCase();
+    return 'U';
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -13,9 +179,14 @@ export default function ProfilePage() {
         <View style={styles.content}>
           <View style={styles.header}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>JD</Text>
+              {user?.imageUrl ? (
+                <Image source={{ uri: user.imageUrl }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>{getInitials()}</Text>
+              )}
             </View>
-            <Text style={styles.name}>John Doe</Text>
+            <Text style={styles.name}>{getDisplayName()}</Text>
+            <Text style={styles.email}>{user?.primaryEmailAddress?.emailAddress || ''}</Text>
             <Text style={styles.level}>Level {userProgress.level} Learner</Text>
           </View>
 
@@ -121,6 +292,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   avatarText: {
     fontSize: 32,
@@ -132,6 +309,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1F2937',
     marginBottom: 4,
+  },
+  email: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
   },
   level: {
     fontSize: 16,

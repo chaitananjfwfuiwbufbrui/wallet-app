@@ -1,25 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { BookOpen, Sparkles, Trophy, Target } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
+import { useOAuth } from '@clerk/clerk-expo';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signInWithGoogle } = useAuth();
+  const { isSignedIn } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
+
+  // Redirect if already signed in
+  useEffect(() => {
+    if (isSignedIn) {
+      router.replace('/(tabs)');
+    }
+  }, [isSignedIn]);
 
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
       setError(null);
-      await signInWithGoogle();
-      router.replace('/(tabs)');
+
+      const { createdSessionId, setActive } = await startOAuthFlow({
+        redirectUrl: Linking.createURL('/(tabs)', { scheme: 'myapp' }),
+      });
+
+      if (createdSessionId) {
+        setActive!({ session: createdSessionId });
+        router.replace('/(tabs)');
+      } else {
+        setError('Sign in was cancelled or failed');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign in');
+      console.error('OAuth error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
     } finally {
       setLoading(false);
     }
@@ -80,9 +103,13 @@ export default function LoginScreen() {
               style={[styles.googleButton, loading && styles.disabledButton]}
               onPress={handleGoogleSignIn}
               disabled={loading}
+              activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color="#1F2937" size="small" />
+                <>
+                  <ActivityIndicator color="#1F2937" size="small" />
+                  <Text style={styles.loadingText}>Signing in...</Text>
+                </>
               ) : (
                 <>
                   <View style={styles.googleIconWrapper}>
@@ -250,6 +277,12 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     fontSize: 16,
     fontWeight: '600',
+  },
+  loadingText: {
+    color: '#1F2937',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   footerText: {
     fontSize: 11,
